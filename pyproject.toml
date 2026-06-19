@@ -1,0 +1,22 @@
+[project]
+name = "seguros-regua"
+version = "0.1.0"
+description = "Régua de cobrança de inadimplência (MAG Seguros + Z-API)"
+requires-python = ">=3.11"
+dependencies = [
+    "playwright>=1.44",
+    "python-dotenv>=1.0",
+    "requests>=2.31",
+    "PyYAML>=6.0",
+    "tzdata>=2024.1",
+]
+
+[project.scripts]
+regua = "seguros.cli:main"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

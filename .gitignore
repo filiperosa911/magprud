@@ -1,0 +1,28 @@
+# Segredos
+.env
+
+# Estado / runtime
+regua.sqlite
+regua.sqlite-wal
+regua.sqlite-shm
+*.sqlite
+*.sqlite-*
+
+# Sessão persistente do Playwright (cookies de login — NUNCA commitar)
+.mag_session/
+
+# Saídas
+logs/
+reports/
+artifacts/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
