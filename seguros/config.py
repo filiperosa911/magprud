@@ -36,6 +36,15 @@ def _as_int(value: str | None, default: int) -> int:
         raise ConfigError(f"valor inteiro inválido: {value!r}") from exc
 
 
+def _parse_hora(value: str | None, default: time) -> time:
+    if value is None or value.strip() == "":
+        return default
+    try:
+        return parse_hhmm(value)
+    except (ValueError, IndexError):
+        return default
+
+
 @dataclass(frozen=True)
 class Config:
     # modo (vem da CLI, não do .env)
@@ -82,6 +91,10 @@ class Config:
     horario_fim: time
     dias_uteis_apenas: bool
     followup_offset_days: int
+
+    # revisão matinal do DOM (health-check de seletores)
+    healthcheck_auto: bool
+    healthcheck_hora: time
 
     # anti-ban / disjuntores
     max_whatsapp_por_dia: int
@@ -213,6 +226,8 @@ def load_config(*, live: bool, env_path: str | None = None) -> Config:
         horario_fim=horario_fim,
         dias_uteis_apenas=_as_bool(os.environ.get("DIAS_UTEIS_APENAS"), True),
         followup_offset_days=_as_int(os.environ.get("FOLLOWUP_OFFSET_DAYS"), 2),
+        healthcheck_auto=_as_bool(os.environ.get("HEALTHCHECK_AUTO"), True),
+        healthcheck_hora=_parse_hora(os.environ.get("HEALTHCHECK_HORA"), time(8, 0)),
         max_whatsapp_por_dia=_as_int(os.environ.get("MAX_WHATSAPP_POR_DIA"), 70),
         pacing_min_s=pacing_min,
         pacing_max_s=pacing_max,

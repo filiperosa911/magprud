@@ -37,12 +37,17 @@
   .btn-emer{ background:linear-gradient(100deg,#10b981,#059669); }
   .btn-danger{ background:transparent; border:1px solid rgba(244,63,94,.4); color:#fda4af; }
   .btn:disabled{ opacity:.5; cursor:not-allowed; }
-  .grid5{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:14px; }
+  /* Ações: 3 colunas fixas (principal · follow-up · opt-out) p/ alinhar entre linhas */
+  .actions-grid{ display:grid; grid-template-columns:112px 118px 72px; gap:6px; justify-content:end; align-items:center; }
+  .actions-grid>*{ box-sizing:border-box; width:100%; }
+  .actions-grid .btn{ padding:8px 8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .actions-grid .badge{ text-align:center; }
+  .grid5{ display:grid; grid-template-columns:repeat(auto-fit,minmax(148px,1fr)); gap:10px; margin-bottom:14px; }
   .grid3{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-bottom:18px; }
-  .kpi{ padding:16px; position:relative; overflow:hidden; }
-  .kpi .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--mut); }
-  .kpi .val{ font-size:26px; font-weight:800; font-family:'Space Grotesk',sans-serif; margin-top:4px; }
-  .kpi .sub{ font-size:11px; color:var(--mut); margin-top:2px; }
+  .kpi{ padding:14px 16px; position:relative; overflow:hidden; min-height:94px; display:flex; flex-direction:column; justify-content:center; }
+  .kpi .lbl{ font-size:10.5px; text-transform:uppercase; letter-spacing:.8px; color:var(--mut); white-space:nowrap; }
+  .kpi .val{ font-size:22px; font-weight:800; font-family:'Space Grotesk',sans-serif; margin-top:3px; white-space:nowrap; line-height:1.15; }
+  .kpi .sub{ font-size:10.5px; color:var(--mut); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
   .kpi .accent{ position:absolute; top:0; left:0; width:3px; height:100%; background:linear-gradient(var(--blue),var(--violet)); }
   .chart{ padding:16px; }
   .chart h3{ font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--mut); margin:0 0 10px; }
@@ -93,6 +98,7 @@
     </header>
 
     <div class="banner glass" id="banner"></div>
+    <div class="glass" id="healthWarn" style="display:none;padding:12px 16px;margin-bottom:14px;background:rgba(244,63,94,.12);color:#fda4af;border-color:rgba(244,63,94,.3);font-size:13px;font-weight:600"></div>
 
     <section class="grid5" id="kpis"></section>
 
@@ -199,6 +205,11 @@ async function refresh(){
     + kpi('Enviados hoje',fmt(m.enviados_hoje),'WhatsApp')
     + kpi('Em HOLD',fmt(m.stages.hold),'aguardando disparo');
   if($('#testNumber')!==document.activeElement) $('#testNumber').value=m.test_number||'';
+  const hw=$('#healthWarn'), h=m.health;
+  if(h && h.falhas && h.falhas.length){
+    hw.style.display='block';
+    hw.textContent=`⚠️ Revisão do DOM (${(h.em||'').slice(5,16).replace('T',' ')}): ${h.falhas.length} seletor(es) crítico(s) quebrado(s) — ${h.falhas.map(f=>f.chave).join(', ')}. A MAG pode ter mudado o layout; recalibre com "python -m seguros --inspect".`;
+  } else { hw.style.display='none'; }
   drawCharts(m); drawRows(cs);
 }
 function drawCharts(m){
@@ -240,18 +251,19 @@ function drawRows(cs){
   }
 }
 function actions(c){
-  let h='';
-  if(c.stage==='descoberto') h+=`<button class="btn btn-amber" onclick="gerarLink('${c.cpf}',this)">Gerar link (HOLD)</button> `;
-  if(c.stage==='hold') h+=`<button class="btn btn-emer" onclick="disparar('${c.cpf}',this,false)">Disparar ▶</button> `;
-  if(c.stage==='disparado'){
-    h+=`<button class="btn btn-ghost" onclick="disparar('${c.cpf}',this,true)">Reenviar</button> `;
-    if(c.followup_enviado){ h+=`<span class="badge b-emer" style="opacity:.8">✓ follow-up</span> `; }
+  const vazio='<span></span>';
+  let a=vazio, b=vazio, cc=vazio;  // colunas fixas: principal · follow-up · opt-out
+  if(c.stage==='descoberto') a=`<button class="btn btn-amber" onclick="gerarLink('${c.cpf}',this)" title="Gera o link e coloca em HOLD">Gerar link</button>`;
+  else if(c.stage==='hold') a=`<button class="btn btn-emer" onclick="disparar('${c.cpf}',this,false)">Disparar ▶</button>`;
+  else if(c.stage==='disparado'){
+    a=`<button class="btn btn-ghost" onclick="disparar('${c.cpf}',this,true)">Reenviar</button>`;
+    if(c.followup_enviado){ b=`<span class="badge b-emer" style="opacity:.85">✓ follow-up</span>`; }
     else { const cls=c.followup_elegivel?'btn-amber':'btn-ghost';
-           const tag=c.followup_elegivel?'⏰ Follow-up (dia 2)':'Follow-up';
-           h+=`<button class="btn ${cls}" onclick="followUp('${c.cpf}',this,false)" title="2º toque sutil; re-checa pagamento antes de enviar">${tag}</button> `; }
+           const tag=c.followup_elegivel?'⏰ Follow-up':'Follow-up';
+           b=`<button class="btn ${cls}" onclick="followUp('${c.cpf}',this,false)" title="2º toque sutil; re-checa pagamento antes de enviar">${tag}</button>`; }
   }
-  if(c.stage!=='opt_out'&&c.stage!=='resolvido') h+=`<button class="btn btn-danger" onclick="optout('${c.cpf}')">opt-out</button>`;
-  return h||'—';
+  if(c.stage!=='opt_out'&&c.stage!=='resolvido') cc=`<button class="btn btn-danger" onclick="optout('${c.cpf}')">opt-out</button>`;
+  return `<div class="actions-grid">${a}${b}${cc}</div>`;
 }
 async function withBtn(btn,label,fn){
   const old=btn?btn.innerHTML:null;

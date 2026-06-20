@@ -1,6 +1,8 @@
+from datetime import time
+
 import pytest
 
-from seguros.clock import iso_utc
+from seguros.clock import iso_utc, now_in
 from seguros.dashboard.service import DashboardService
 from seguros.db.connection import init_db
 from seguros.db.repository import (
@@ -198,6 +200,17 @@ def test_trava_teste_bloqueia_webhook_por_telefone(make_config, tmp_path, monkey
     r = s.processar_inbound(telefone="5551999990000", texto="já paguei", origem="webhook")
     assert r["outcome"] == "bloqueado_trava_teste"
     assert _status(s) is ReguaStatus.EM_REGUA  # nada mudou
+
+
+def test_healthcheck_due(make_config, tmp_path):
+    cfg = make_config(tmp_path, healthcheck_auto=True, healthcheck_hora=time(0, 0))
+    s = DashboardService(cfg)
+    assert s._healthcheck_due() is True  # 00:00 já passou e nunca rodou hoje
+    s._last_health_date = now_in(cfg.timezone).date().isoformat()
+    assert s._healthcheck_due() is False  # já rodou hoje
+    s._last_health_date = None
+    cfg2 = make_config(tmp_path / "off", healthcheck_auto=False, healthcheck_hora=time(0, 0))
+    assert DashboardService(cfg2)._healthcheck_due() is False  # auto desligado
 
 
 def test_webhook_auth(svc, make_config, tmp_path):

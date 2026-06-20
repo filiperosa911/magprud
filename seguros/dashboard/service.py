@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import secrets
+import threading
 from collections import Counter
 
 from ..clock import days_since, iso_utc, now_in
@@ -114,6 +115,14 @@ class DashboardService:
         self.worker = ConnectorWorker(config)
         self.test_number = config.whatsapp_override_to  # número de teste (mutável)
         self._zapi = None
+        # revisão matinal do DOM (health-check) — 1x/dia, só com a sessão de pé
+        self._last_health: dict | None = None
+        self._last_health_date: str | None = None
+        self._health_lock = threading.Lock()
+        self._health_stop = threading.Event()
+        if config.healthcheck_auto:
+            threading.Thread(target=self._healthcheck_loop, name="dom-healthcheck",
+                             daemon=True).start()
 
     # --- infra ---------------------------------------------------------------
 
@@ -265,6 +274,7 @@ class DashboardService:
             "disparos_por_resultado": por_resultado,
             "test_number": self.test_number,
             "worker": self.worker.status(),
+            "health": self._last_health,  # última revisão do DOM (None = ainda não rodou)
         }
 
     def log_recente(self, limit: int = 50) -> list[dict]:
@@ -282,6 +292,7 @@ class DashboardService:
     # --- ações MAG (via worker) ---------------------------------------------
 
     def discover(self) -> dict:
+        self._maybe_daily_healthcheck()  # revisão matinal do DOM (1x/dia) ao começar o trabalho
         delinquents = self._mag(lambda c: c.discover_delinquents())
         conn = self._conn()
         novos = 0
@@ -834,6 +845,65 @@ class DashboardService:
             "contextuais": len(results) - len(criticos),  # detalhe/modal/login (não checados aqui)
         }
 
+    # --- revisão matinal automática do DOM ----------------------------------
+
+    def _healthcheck_due(self) -> bool:
+        if not self.config.healthcheck_auto:
+            return False
+        agora = now_in(self.config.timezone)
+        if agora.time() < self.config.healthcheck_hora:  # só de manhã (após a hora)
+            return False
+        return self._last_health_date != agora.date().isoformat()
+
+    def _run_daily_healthcheck(self, origem: str) -> None:
+        """Roda o health-check 1x/dia e ALERTA por WhatsApp se um seletor crítico
+        quebrou (a MAG mudou o layout). Só marca como feito se a sessão respondeu."""
+        with self._health_lock:
+            if not self._healthcheck_due():  # re-checa sob lock (evita corrida)
+                return
+            try:
+                res = self.health_selectors()
+            except DashboardError as e:
+                log.info("revisão do DOM adiada (%s): %s", origem, e)  # sessão fora do ar
+                return
+            self._last_health = {**res, "em": iso_utc(), "origem": origem}
+            self._last_health_date = now_in(self.config.timezone).date().isoformat()
+            if res.get("falhas"):
+                chaves = ", ".join(f["chave"] for f in res["falhas"])
+                log.warning("revisão do DOM: %d seletor(es) crítico(s) quebrado(s): %s",
+                            len(res["falhas"]), chaves)
+                self._alertar_corretor(
+                    f"⚠️ Régua MAG — revisão matinal: {len(res['falhas'])} seletor(es) "
+                    f"crítico(s) quebrado(s) ({chaves}). A MAG pode ter mudado o layout — "
+                    f"recalibre com `python -m seguros --inspect` antes da próxima cobrança."
+                )
+            else:
+                log.info("revisão do DOM ok (%d/%d seletores)", res["ok"], res["total"])
+
+    def _maybe_daily_healthcheck(self) -> None:
+        if self._healthcheck_due():
+            self._run_daily_healthcheck("descoberta")
+
+    def _healthcheck_loop(self) -> None:
+        """Fundo: tenta a revisão a cada 30 min — só roda se a sessão estiver de pé."""
+        while not self._health_stop.is_set():
+            try:
+                if self._healthcheck_due() and self.worker.status().get("conector_ativo"):
+                    self._run_daily_healthcheck("agendado")
+            except Exception:  # noqa: BLE001 - loop nunca morre
+                log.warning("loop da revisão do DOM falhou", exc_info=True)
+            self._health_stop.wait(1800)  # 30 min
+
+    def _alertar_corretor(self, texto: str) -> None:
+        destino = _canon(self.test_number or self.config.notify_whatsapp_to)
+        if not is_valid_whatsapp(destino):
+            log.warning("sem número p/ alertar o corretor (revisão do DOM)")
+            return
+        try:
+            self._zapi_sender().send(destino, texto)
+        except Exception:  # noqa: BLE001 - alerta é best-effort
+            log.warning("falha ao alertar o corretor", exc_info=True)
+
     def set_test_number(self, numero: str | None) -> dict:
         numero = (numero or "").strip()
         if numero and not is_valid_whatsapp(numero):
@@ -842,6 +912,7 @@ class DashboardService:
         return {"ok": True, "test_number": self.test_number}
 
     def shutdown(self) -> None:
+        self._health_stop.set()
         self.worker.shutdown()
 
 

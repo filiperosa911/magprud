@@ -37,6 +37,8 @@ def make_config():
             horario_fim=time(23, 59),
             dias_uteis_apenas=False,  # janela sempre aberta nos testes
             followup_offset_days=2,
+            healthcheck_auto=False,  # sem thread de fundo nos testes
+            healthcheck_hora=time(8, 0),
             max_whatsapp_por_dia=70,
             pacing_min_s=0,
             pacing_max_s=0,
