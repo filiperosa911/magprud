@@ -10,8 +10,9 @@ from __future__ import annotations
 import sqlite3
 from datetime import timedelta
 
-from ..clock import iso_utc, now_utc
+from ..clock import iso_utc, now_utc, parse_iso
 from ..domain.models import Canal, ClienteRegua, Modo, ReguaStatus, Resultado
+from ..messaging.phone import canonical_brazilian_phone
 
 
 def _row_to_cliente(row: sqlite3.Row) -> ClienteRegua:
@@ -32,6 +33,14 @@ def _row_to_cliente(row: sqlite3.Row) -> ClienteRegua:
         autoriza_email=bool(row["autoriza_email"]),
         whatsapp_enviado_em=row["whatsapp_enviado_em"],
         email_enviado_em=row["email_enviado_em"],
+        follow_up_enviado_em=row["follow_up_enviado_em"],
+        primeiro_disparo_em=row["primeiro_disparo_em"],
+        resolvido_em=row["resolvido_em"],
+        tempo_ate_pagar_horas=row["tempo_ate_pagar_horas"],
+        conversao_atribuida=bool(row["conversao_atribuida"]),
+        valor_recuperado_cents=row["valor_recuperado_cents"],
+        ultimo_check_em=row["ultimo_check_em"],
+        checks_count=row["checks_count"] or 0,
         enrolled_em=row["enrolled_em"],
         status=ReguaStatus(row["status"]),
         atualizado_em=row["atualizado_em"],
@@ -105,18 +114,79 @@ class ReguaRepository:
     def mark_whatsapp_sent(self, cpf: str, when_iso: str | None = None) -> None:
         ts = when_iso or iso_utc()
         self.conn.execute(
-            "UPDATE clientes_regua SET whatsapp_enviado_em = ?, atualizado_em = ? "
+            "UPDATE clientes_regua SET whatsapp_enviado_em = ?, "
+            "primeiro_disparo_em = COALESCE(primeiro_disparo_em, ?), atualizado_em = ? "
             "WHERE corretor_id = ? AND cpf = ?",
-            (ts, iso_utc(), self.corretor_id, cpf),
+            (ts, ts, iso_utc(), self.corretor_id, cpf),
+        )
+        self.conn.commit()
+
+    def mark_follow_up_sent(self, cpf: str, when_iso: str | None = None) -> None:
+        self.conn.execute(
+            "UPDATE clientes_regua SET follow_up_enviado_em = ?, atualizado_em = ? "
+            "WHERE corretor_id = ? AND cpf = ?",
+            (when_iso or iso_utc(), iso_utc(), self.corretor_id, cpf),
         )
         self.conn.commit()
 
     def mark_email_sent(self, cpf: str, when_iso: str | None = None) -> None:
         ts = when_iso or iso_utc()
         self.conn.execute(
-            "UPDATE clientes_regua SET email_enviado_em = ?, atualizado_em = ? "
+            "UPDATE clientes_regua SET email_enviado_em = ?, "
+            "primeiro_disparo_em = COALESCE(primeiro_disparo_em, ?), atualizado_em = ? "
             "WHERE corretor_id = ? AND cpf = ?",
-            (ts, iso_utc(), self.corretor_id, cpf),
+            (ts, ts, iso_utc(), self.corretor_id, cpf),
+        )
+        self.conn.commit()
+
+    def mark_resolved(self, cpf: str) -> dict:
+        """Marca pagamento detectado (idempotente: 1ª detecção vence). Calcula o
+        tempo até pagar e se a conversão é atribuída ao nosso disparo."""
+        row = self.conn.execute(
+            "SELECT resolvido_em, primeiro_disparo_em, valor_inadimplente_cents "
+            "FROM clientes_regua WHERE corretor_id = ? AND cpf = ?",
+            (self.corretor_id, cpf),
+        ).fetchone()
+        if row is None:
+            return {"first_time": False}
+        if row["resolvido_em"]:  # já resolvido — não sobrescreve
+            return {"first_time": False, "atribuida": False}
+        agora = iso_utc()
+        pd = row["primeiro_disparo_em"]
+        tempo_h = None
+        atribuida = 0
+        if pd:
+            delta = (parse_iso(agora) - parse_iso(pd)).total_seconds()
+            if delta >= 0:
+                tempo_h = round(delta / 3600, 2)
+                atribuida = 1
+        self.conn.execute(
+            "UPDATE clientes_regua SET status = 'resolvido', resolvido_em = ?, "
+            "tempo_ate_pagar_horas = ?, conversao_atribuida = ?, "
+            "valor_recuperado_cents = COALESCE(valor_recuperado_cents, valor_inadimplente_cents), "
+            "atualizado_em = ? WHERE corretor_id = ? AND cpf = ?",
+            (agora, tempo_h, atribuida, iso_utc(), self.corretor_id, cpf),
+        )
+        self.conn.commit()
+        return {"first_time": True, "atribuida": bool(atribuida), "tempo_horas": tempo_h}
+
+    def due_for_recheck(self, *, min_hours: int = 12, limit: int = 30) -> list[ClienteRegua]:
+        """Fila de reconciliação: disparados, ainda em régua, sem check recente."""
+        cutoff = iso_utc(now_utc() - timedelta(hours=min_hours))
+        cur = self.conn.execute(
+            "SELECT * FROM clientes_regua WHERE corretor_id = ? AND status = 'em_regua' "
+            "AND (whatsapp_enviado_em IS NOT NULL OR email_enviado_em IS NOT NULL) "
+            "AND (ultimo_check_em IS NULL OR ultimo_check_em <= ?) "
+            "ORDER BY (ultimo_check_em IS NOT NULL), ultimo_check_em LIMIT ?",
+            (self.corretor_id, cutoff, limit),
+        )
+        return [_row_to_cliente(r) for r in cur.fetchall()]
+
+    def touch_check(self, cpf: str) -> None:
+        self.conn.execute(
+            "UPDATE clientes_regua SET ultimo_check_em = ?, checks_count = checks_count + 1 "
+            "WHERE corretor_id = ? AND cpf = ?",
+            (iso_utc(), self.corretor_id, cpf),
         )
         self.conn.commit()
 
@@ -194,6 +264,24 @@ class ReguaRepository:
         )
         return {r["cpf"] for r in cur.fetchall()}
 
+    def find_cpf_by_telefone(self, telefone_canonical: str | None) -> str | None:
+        """CPF do cliente cujo telefone casa (canonicalizando os dois lados — a MAG
+        às vezes guarda sem o 9º dígito). Retorna None se 0 OU >1 match (ambiguidade
+        nunca age no cliente errado)."""
+        if not telefone_canonical:
+            return None
+        cur = self.conn.execute(
+            "SELECT cpf, telefone FROM clientes_regua "
+            "WHERE corretor_id = ? AND telefone IS NOT NULL AND TRIM(telefone) <> ''",
+            (self.corretor_id,),
+        )
+        matches = {
+            r["cpf"]
+            for r in cur.fetchall()
+            if canonical_brazilian_phone(r["telefone"]) == telefone_canonical
+        }
+        return next(iter(matches)) if len(matches) == 1 else None
+
 
 class OptOutRepository:
     def __init__(self, conn: sqlite3.Connection, corretor_id: str = "local") -> None:
@@ -218,11 +306,18 @@ class OptOutRepository:
 
     def add(self, *, cpf: str | None = None, telefone: str | None = None,
             origem: str = "manual") -> None:
-        self.conn.execute(
-            "INSERT INTO opt_out (corretor_id, cpf, telefone, origem, data) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (self.corretor_id, cpf, telefone, origem, iso_utc()),
-        )
+        if cpf:  # idempotente por cpf (uq_optout_cpf); grava o telefone junto se houver
+            self.conn.execute(
+                "INSERT OR IGNORE INTO opt_out (corretor_id, cpf, telefone, origem, data) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (self.corretor_id, cpf, telefone, origem, iso_utc()),
+            )
+        elif telefone and not self.is_opted_out(telefone=telefone):  # sem UNIQUE: dedupe manual
+            self.conn.execute(
+                "INSERT INTO opt_out (corretor_id, cpf, telefone, origem, data) "
+                "VALUES (?, NULL, ?, ?, ?)",
+                (self.corretor_id, telefone, origem, iso_utc()),
+            )
         self.conn.commit()
 
 
@@ -260,4 +355,143 @@ class LogRepository:
         self.conn.commit()
 
 
-__all__ = ["ReguaRepository", "OptOutRepository", "LogRepository"]
+class StatusCheckRepository:
+    def __init__(self, conn: sqlite3.Connection, corretor_id: str = "local") -> None:
+        self.conn = conn
+        self.corretor_id = corretor_id
+
+    def record(self, *, cpf: str, all_regularized: bool, transicao: bool, origem: str) -> None:
+        self.conn.execute(
+            "INSERT INTO status_checks (corretor_id, cpf, all_regularized, transicao, origem, "
+            "checked_em) VALUES (?, ?, ?, ?, ?, ?)",
+            (self.corretor_id, cpf, int(all_regularized), int(transicao), origem, iso_utc()),
+        )
+        self.conn.commit()
+
+    def pagamentos_por_dia(self, dias: int = 30) -> list[dict]:
+        """Conversões (transições devendo->pago) por dia, p/ a curva de pagamentos."""
+        cur = self.conn.execute(
+            "SELECT substr(checked_em, 1, 10) dia, COUNT(*) n FROM status_checks "
+            "WHERE corretor_id = ? AND transicao = 1 GROUP BY dia ORDER BY dia DESC LIMIT ?",
+            (self.corretor_id, dias),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+class InboundRepository:
+    """Log de mensagens recebidas + GATE de idempotência atômico (must-fix #4)."""
+
+    def __init__(self, conn: sqlite3.Connection, corretor_id: str = "local") -> None:
+        self.conn = conn
+        self.corretor_id = corretor_id
+
+    def record(self, *, message_id, cpf, telefone, telefone_raw, sender_name, texto,
+               intent, confianca, data_desejada, origem, outcome) -> tuple[int | None, bool]:
+        """INSERT OR IGNORE atômico. Retorna (id, is_new). is_new=False quando o
+        message_id já foi processado (a trava de idempotência). Com message_id=None
+        (simulação) sempre insere (is_new=True)."""
+        cur = self.conn.execute(
+            "INSERT OR IGNORE INTO inbound_messages (corretor_id, message_id, cpf, telefone, "
+            "telefone_raw, sender_name, texto, intent, confianca, data_desejada, origem, "
+            "outcome, recebido_em) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (self.corretor_id, message_id, cpf, telefone, telefone_raw, sender_name, texto,
+             intent, confianca, data_desejada, origem, outcome, iso_utc()),
+        )
+        self.conn.commit()
+        if cur.rowcount == 0:  # message_id duplicado -> já existe
+            row = self.conn.execute(
+                "SELECT id FROM inbound_messages WHERE corretor_id = ? AND message_id = ?",
+                (self.corretor_id, message_id),
+            ).fetchone()
+            return (row["id"] if row else None, False)
+        return (cur.lastrowid, True)
+
+    def mark_outcome(self, inbound_id: int, outcome: str, *, cpf: str | None = None) -> None:
+        if cpf is not None:
+            self.conn.execute(
+                "UPDATE inbound_messages SET outcome = ?, cpf = ? WHERE corretor_id = ? AND id = ?",
+                (outcome, cpf, self.corretor_id, inbound_id),
+            )
+        else:
+            self.conn.execute(
+                "UPDATE inbound_messages SET outcome = ? WHERE corretor_id = ? AND id = ?",
+                (outcome, self.corretor_id, inbound_id),
+            )
+        self.conn.commit()
+
+    def recentes(self, limit: int = 50) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM inbound_messages WHERE corretor_id = ? ORDER BY id DESC LIMIT ?",
+            (self.corretor_id, limit),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+
+class RescheduleRepository:
+    """Pedidos de remarcação ('quer outro dia') com máquina de estados."""
+
+    def __init__(self, conn: sqlite3.Connection, corretor_id: str = "local") -> None:
+        self.conn = conn
+        self.corretor_id = corretor_id
+
+    def create(self, *, cpf, data_desejada, texto_origem, inbound_id) -> int:
+        now = iso_utc()
+        cur = self.conn.execute(
+            "INSERT INTO reschedule_requests (corretor_id, cpf, inbound_id, data_desejada, "
+            "texto_origem, status, criado_em, atualizado_em) VALUES (?, ?, ?, ?, ?, 'aberto', ?, ?)",
+            (self.corretor_id, cpf, inbound_id, data_desejada, texto_origem, now, now),
+        )
+        self.conn.commit()
+        return cur.lastrowid
+
+    def open_for_cpf(self, cpf: str) -> dict | None:
+        """Pedido ainda em aberto p/ o CPF (dedupe de múltiplos pedidos — edge case)."""
+        row = self.conn.execute(
+            "SELECT * FROM reschedule_requests WHERE corretor_id = ? AND cpf = ? "
+            "AND status IN ('aberto', 'admin_avisado') ORDER BY id DESC LIMIT 1",
+            (self.corretor_id, cpf),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def mark_admin_notified(self, rid: int) -> None:
+        now = iso_utc()
+        self.conn.execute(
+            "UPDATE reschedule_requests SET status = 'admin_avisado', admin_avisado_em = ?, "
+            "atualizado_em = ? WHERE corretor_id = ? AND id = ? AND status = 'aberto'",
+            (now, now, self.corretor_id, rid),
+        )
+        self.conn.commit()
+
+    def mark_link_reenviado(self, rid: int, link: str) -> None:
+        now = iso_utc()
+        self.conn.execute(
+            "UPDATE reschedule_requests SET status = 'link_reenviado', link_novo = ?, "
+            "link_reenviado_em = ?, atualizado_em = ? WHERE corretor_id = ? AND id = ?",
+            (link, now, now, self.corretor_id, rid),
+        )
+        self.conn.commit()
+
+    def pendentes(self) -> list[dict]:
+        cur = self.conn.execute(
+            "SELECT * FROM reschedule_requests WHERE corretor_id = ? "
+            "AND status IN ('aberto', 'admin_avisado') ORDER BY id DESC",
+            (self.corretor_id,),
+        )
+        return [dict(r) for r in cur.fetchall()]
+
+    def get(self, rid: int) -> dict | None:
+        row = self.conn.execute(
+            "SELECT * FROM reschedule_requests WHERE corretor_id = ? AND id = ?",
+            (self.corretor_id, rid),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+__all__ = [
+    "ReguaRepository",
+    "OptOutRepository",
+    "LogRepository",
+    "StatusCheckRepository",
+    "InboundRepository",
+    "RescheduleRepository",
+]

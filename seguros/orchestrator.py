@@ -140,7 +140,7 @@ class Orchestrator:
                 try:
                     if self.connector.check_status(cpf).all_regularized:
                         if self.cfg.live:  # dry-run não persiste mutação de estado
-                            self.repo.set_status(cpf, ReguaStatus.RESOLVIDO)
+                            self.repo.mark_resolved(cpf)
                         self.log_repo.record(
                             cpf=cpf, canal=Canal.SISTEMA, resultado=Resultado.REGULARIZADO,
                             modo=self.modo, payload_resumo="reconciliado: saiu da inadimplência",
@@ -208,7 +208,7 @@ class Orchestrator:
         status = self.connector.check_status(cliente.cpf)
         if status.all_regularized:
             if self.cfg.live:  # dry-run não persiste mutação de estado
-                self.repo.set_status(cliente.cpf, ReguaStatus.RESOLVIDO)
+                self.repo.mark_resolved(cliente.cpf)
             self.log_repo.record(cpf=cliente.cpf, canal=Canal.SISTEMA,
                                  resultado=Resultado.REGULARIZADO, modo=self.modo,
                                  payload_resumo="regularizado no follow-up")

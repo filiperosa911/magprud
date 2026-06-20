@@ -23,6 +23,69 @@ Se já tiver pago, pode desconsiderar. Qualquer dúvida, estou à disposição p
 Caso não queira mais receber estes lembretes por WhatsApp, responda SAIR."""
 )
 
+# Follow-up (dia 2): 2º toque, sutil/leve, abre a porta pra conversa.
+WHATSAPP_FOLLOWUP = Template(
+    """Olá, ${primeiro_nome}, tudo bem? 😊
+Não sei se você chegou a ver minha mensagem do outro dia. Passando só pra relembrar que a pendência do seu seguro MAG referente a ${competencia} (${valor_total}) ainda está em aberto, e o link que te enviei vence hoje:
+${link_pagamento}
+Se já tiver pago, pode desconsiderar! E se quiser que eu gere um novo link, é só me avisar por aqui.
+Abraço, ${nome_corretor} — ${corretora}"""
+)
+
+# --- Agente inbound: respostas automáticas ao cliente ------------------------
+
+RESP_SAIR = Template(
+    "Tudo certo, ${primeiro_nome}. Não vou mais te enviar lembretes por aqui. "
+    "Se precisar de algo sobre seu seguro, é só me chamar. Abraço, ${nome_corretor}."
+)
+RESP_JA_PAGUEI_CONFIRMADO = Template(
+    "Perfeito, ${primeiro_nome}! Confirmei aqui que está tudo regularizado. "
+    "Obrigado e qualquer coisa estou à disposição."
+)
+RESP_JA_PAGUEI_PENDENTE = Template(
+    "Obrigado por avisar, ${primeiro_nome}. Pelo meu sistema ainda consta um valor "
+    "em aberto (${valor_total}). Às vezes a baixa leva algumas horas — se você já "
+    "pagou, pode ignorar. O link segue válido, caso precise:\n${link_pagamento}"
+)
+RESP_JA_PAGUEI_VERIFICANDO = Template(
+    "Obrigado, ${primeiro_nome}! Vou confirmar a baixa e já te retorno por aqui."
+)
+RESP_RESCHEDULE_OK = Template(
+    "Sem problema, ${primeiro_nome}. Anotei aqui para ${data_desejada} e já avisei a "
+    "corretora. Te retorno com o link atualizado. Qualquer mudança, é só avisar."
+)
+RESP_RESCHEDULE_SEM_DATA = Template(
+    "Claro, ${primeiro_nome}! Para qual data fica melhor para você? Me diz o dia que "
+    "eu deixo tudo certo por aqui."
+)
+RESP_NOVO_LINK = Template(
+    "Claro, ${primeiro_nome}! Aqui está o link de pagamento:\n${link_pagamento}\n"
+    "Se tiver qualquer dificuldade para abrir, me avisa que eu te ajudo."
+)
+RESP_NOVO_LINK_SEM_LINK = Template(
+    "Claro, ${primeiro_nome}! Vou verificar o link com a corretora e já te reenvio "
+    "por aqui. Qualquer coisa, estou à disposição."
+)
+RESP_DUVIDA = Template(
+    "Oi, ${primeiro_nome}! Obrigado pela mensagem. Vou verificar com calma e já te "
+    "retorno por aqui. Se for urgente, me avisa."
+)
+
+# --- Avisos ao admin (handoff humano) ----------------------------------------
+
+NOTIFY_ADMIN_RESCHEDULE = Template(
+    "🗓️ *Remarcação pedida*\nCliente: ${nome} (${cpf_fmt})\nData desejada: ${data_desejada}\n"
+    'Mensagem: "${texto}"\nAção: confirmar a reemissão do boleto no painel.'
+)
+NOTIFY_ADMIN_DUVIDA = Template(
+    '❓ *Dúvida de cliente*\nCliente: ${nome} (${cpf_fmt})\nMensagem: "${texto}"\n'
+    "Ação: responder o cliente manualmente."
+)
+NOTIFY_ADMIN_JA_PAGUEI_SEM_LEITURA = Template(
+    "⚠️ *Conferir pagamento*\nCliente: ${nome} (${cpf_fmt}) disse que pagou, mas não "
+    'consegui ler o "Valor inadimplente" na MAG.\nMensagem: "${texto}"\nAção: conferir manualmente.'
+)
+
 EMAIL_DIA2_ASSUNTO = Template("Pendência no seu seguro MAG — ${competencia}")
 
 EMAIL_DIA2_TEXTO = Template(
@@ -90,6 +153,19 @@ def render(template: Template, ctx: dict, *, escape_html: bool = False) -> str:
 
 __all__ = [
     "WHATSAPP_DIA0",
+    "WHATSAPP_FOLLOWUP",
+    "RESP_SAIR",
+    "RESP_JA_PAGUEI_CONFIRMADO",
+    "RESP_JA_PAGUEI_PENDENTE",
+    "RESP_JA_PAGUEI_VERIFICANDO",
+    "RESP_RESCHEDULE_OK",
+    "RESP_RESCHEDULE_SEM_DATA",
+    "RESP_NOVO_LINK",
+    "RESP_NOVO_LINK_SEM_LINK",
+    "RESP_DUVIDA",
+    "NOTIFY_ADMIN_RESCHEDULE",
+    "NOTIFY_ADMIN_DUVIDA",
+    "NOTIFY_ADMIN_JA_PAGUEI_SEM_LEITURA",
     "EMAIL_DIA2_ASSUNTO",
     "EMAIL_DIA2_TEXTO",
     "EMAIL_DIA2_HTML",

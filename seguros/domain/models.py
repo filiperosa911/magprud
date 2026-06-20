@@ -63,6 +63,14 @@ class ClienteRegua:
     autoriza_email: bool = False
     whatsapp_enviado_em: str | None = None  # ISO UTC ou None
     email_enviado_em: str | None = None
+    follow_up_enviado_em: str | None = None  # 2º toque (dia 2)
+    primeiro_disparo_em: str | None = None  # 1º toque (WhatsApp ou e-mail)
+    resolvido_em: str | None = None  # quando detectamos o pagamento
+    tempo_ate_pagar_horas: float | None = None
+    conversao_atribuida: bool = False  # pagou DEPOIS do disparo
+    valor_recuperado_cents: int | None = None
+    ultimo_check_em: str | None = None
+    checks_count: int = 0
     enrolled_em: str | None = None  # ISO UTC — "dia 0"
     status: ReguaStatus = ReguaStatus.EM_REGUA
     atualizado_em: str | None = None

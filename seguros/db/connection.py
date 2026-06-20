@@ -31,8 +31,20 @@ def init_db(db_path: Path | str) -> sqlite3.Connection:
 def _migrate(conn: sqlite3.Connection) -> None:
     """Migrações leves: adiciona colunas novas a bancos já existentes."""
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(clientes_regua)")}
-    if "work_status" not in cols:
-        conn.execute("ALTER TABLE clientes_regua ADD COLUMN work_status TEXT")
+    novas = {
+        "work_status": "TEXT",
+        "follow_up_enviado_em": "TEXT",
+        "primeiro_disparo_em": "TEXT",
+        "resolvido_em": "TEXT",
+        "tempo_ate_pagar_horas": "REAL",
+        "conversao_atribuida": "INTEGER NOT NULL DEFAULT 0",
+        "valor_recuperado_cents": "INTEGER",
+        "ultimo_check_em": "TEXT",
+        "checks_count": "INTEGER NOT NULL DEFAULT 0",
+    }
+    for nome, tipo in novas.items():
+        if nome not in cols:
+            conn.execute(f"ALTER TABLE clientes_regua ADD COLUMN {nome} {tipo}")
 
 
 __all__ = ["get_conn", "init_db"]

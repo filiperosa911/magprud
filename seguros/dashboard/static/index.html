@@ -4,265 +4,341 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Régua MAG — Painel</title>
-<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script>
-  tailwind.config = { theme: { extend: { colors: { brand: '#0b5fff', ink: '#1e293b' } } } };
-</script>
 <style>
-  body { background: #f1f5f9; }
-  .card { background:#fff; border:1px solid #e2e8f0; border-radius:14px; box-shadow:0 1px 2px rgba(15,23,42,.04); }
-  .badge { padding:2px 10px; border-radius:9999px; font-size:11px; font-weight:600; }
-  .btn { padding:6px 12px; border-radius:9px; font-size:13px; font-weight:600; transition:.15s; }
-  .btn:disabled { opacity:.5; cursor:not-allowed; }
-  .spin { width:14px;height:14px;border:2px solid #cbd5e1;border-top-color:#0b5fff;border-radius:50%;display:inline-block;animation:s .7s linear infinite;vertical-align:-2px }
-  @keyframes s { to { transform:rotate(360deg) } }
-  table { border-collapse:separate; border-spacing:0; }
-  tbody tr:hover { background:#f8fafc; }
+  :root{ --blue:#3b82f6; --violet:#8b5cf6; --cyan:#22d3ee; --bg:#05070f; --ink:#e7ecf5; --mut:#8aa0c0; }
+  *{ box-sizing:border-box; }
+  body{ margin:0; font-family:'Inter',system-ui,sans-serif; color:var(--ink); background:var(--bg); min-height:100vh; }
+  .aurora{ position:fixed; border-radius:50%; filter:blur(110px); opacity:.4; z-index:0; pointer-events:none; }
+  .a1{ width:560px;height:560px; background:radial-gradient(circle,#1d4ed8,transparent 70%); top:-220px; left:-160px; }
+  .a2{ width:600px;height:600px; background:radial-gradient(circle,#6d28d9,transparent 70%); top:-160px; right:-200px; opacity:.3; }
+  .wrap{ position:relative; z-index:1; max-width:1280px; margin:0 auto; padding:22px; }
+  .glass{ background:linear-gradient(160deg,rgba(20,27,45,.72),rgba(11,16,30,.6));
+    border:1px solid rgba(255,255,255,.07); border-radius:16px;
+    backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); box-shadow:0 18px 50px -24px rgba(0,0,0,.7); }
+  header{ display:flex; flex-wrap:wrap; gap:14px; align-items:center; justify-content:space-between; margin-bottom:20px; }
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .orb{ width:42px;height:42px;border-radius:12px; background:conic-gradient(from 180deg,var(--blue),var(--violet),var(--cyan),var(--blue));
+    display:grid;place-items:center; font-weight:900; color:#0b1020; box-shadow:0 0 26px rgba(59,130,246,.55); }
+  h1{ font-family:'Space Grotesk',sans-serif; font-size:20px; margin:0; font-weight:700; }
+  h1 span{ background:linear-gradient(90deg,var(--blue),var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .muted{ color:var(--mut); }
+  .ctl{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  input{ background:rgba(8,12,22,.7); border:1px solid rgba(255,255,255,.1); color:var(--ink); border-radius:10px; padding:8px 11px; font-size:13px; outline:none; }
+  input:focus{ border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,.16); }
+  .btn{ padding:8px 14px; border-radius:10px; font-size:13px; font-weight:600; border:0; cursor:pointer; transition:.18s; color:#fff; }
+  .btn-grad{ background:linear-gradient(100deg,var(--blue),var(--violet)); box-shadow:0 10px 26px -10px rgba(59,130,246,.6); }
+  .btn-grad:hover{ transform:translateY(-1px); }
+  .btn-ghost{ background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:var(--ink); }
+  .btn-ghost:hover{ background:rgba(255,255,255,.12); }
+  .btn-amber{ background:linear-gradient(100deg,#f59e0b,#f97316); }
+  .btn-emer{ background:linear-gradient(100deg,#10b981,#059669); }
+  .btn-danger{ background:transparent; border:1px solid rgba(244,63,94,.4); color:#fda4af; }
+  .btn:disabled{ opacity:.5; cursor:not-allowed; }
+  .grid5{ display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr)); gap:12px; margin-bottom:14px; }
+  .grid3{ display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:12px; margin-bottom:18px; }
+  .kpi{ padding:16px; position:relative; overflow:hidden; }
+  .kpi .lbl{ font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--mut); }
+  .kpi .val{ font-size:26px; font-weight:800; font-family:'Space Grotesk',sans-serif; margin-top:4px; }
+  .kpi .sub{ font-size:11px; color:var(--mut); margin-top:2px; }
+  .kpi .accent{ position:absolute; top:0; left:0; width:3px; height:100%; background:linear-gradient(var(--blue),var(--violet)); }
+  .chart{ padding:16px; }
+  .chart h3{ font-size:12px; text-transform:uppercase; letter-spacing:1px; color:var(--mut); margin:0 0 10px; }
+  .tabs{ display:flex; gap:8px; margin-bottom:12px; }
+  .tab{ padding:8px 16px; border-radius:10px; font-size:13px; font-weight:600; cursor:pointer; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.08); color:var(--mut); }
+  .tab.on{ background:linear-gradient(100deg,var(--blue),var(--violet)); color:#fff; border-color:transparent; }
+  table{ width:100%; border-collapse:collapse; font-size:13px; }
+  thead th{ text-align:left; padding:12px 14px; font-size:11px; text-transform:uppercase; letter-spacing:.6px; color:var(--mut); border-bottom:1px solid rgba(255,255,255,.07); }
+  tbody td{ padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.05); vertical-align:middle; }
+  tbody tr:hover{ background:rgba(255,255,255,.03); }
+  .badge{ display:inline-block; padding:3px 10px; border-radius:9999px; font-size:11px; font-weight:600; border:1px solid transparent; }
+  .b-slate{ background:rgba(148,163,184,.14); color:#cbd5e1; }
+  .b-violet{ background:rgba(139,92,246,.16); color:#c4b5fd; border-color:rgba(139,92,246,.3); }
+  .b-amber{ background:rgba(245,158,11,.16); color:#fcd34d; border-color:rgba(245,158,11,.3); }
+  .b-emer{ background:rgba(16,185,129,.16); color:#6ee7b7; border-color:rgba(16,185,129,.3); }
+  .b-blue{ background:rgba(59,130,246,.16); color:#93c5fd; border-color:rgba(59,130,246,.3); }
+  .b-red{ background:rgba(244,63,94,.16); color:#fda4af; border-color:rgba(244,63,94,.3); }
+  .spin{ width:13px;height:13px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;display:inline-block;animation:s .7s linear infinite;vertical-align:-2px }
+  @keyframes s{ to{transform:rotate(360deg)} }
+  .mono{ font-family:ui-monospace,monospace; font-size:12px; }
+  .banner{ margin-bottom:14px; font-size:13px; border-radius:11px; padding:11px 16px; display:none; }
+  a{ color:#93c5fd; }
 </style>
 </head>
-<body class="text-ink">
-<div class="max-w-7xl mx-auto p-5">
+<body>
+  <div class="aurora a1"></div><div class="aurora a2"></div>
+  <div class="wrap">
 
-  <!-- Top bar -->
-  <header class="flex flex-wrap items-center justify-between gap-3 mb-5">
-    <div>
-      <h1 class="text-2xl font-extrabold tracking-tight">Régua de Cobrança <span class="text-brand">MAG</span></h1>
-      <p class="text-sm text-slate-500">Painel do gestor — controle da jornada de cobrança</p>
-    </div>
-    <div class="flex items-center gap-2">
-      <div class="card px-3 py-2 flex items-center gap-2">
-        <span class="text-xs text-slate-500">📱 Nº de teste</span>
-        <input id="testNumber" class="w-40 text-sm border rounded-md px-2 py-1" placeholder="vazio = cliente real" />
-        <button class="btn bg-slate-100 hover:bg-slate-200" onclick="saveTestNumber()">salvar</button>
+    <header>
+      <div class="brand">
+        <div class="orb">R</div>
+        <div>
+          <h1>Régua <span>MAG</span></h1>
+          <div class="muted" style="font-size:11px;letter-spacing:1px;">PAINEL DO GESTOR · JORNADA DE COBRANÇA</div>
+        </div>
       </div>
-      <button class="btn bg-brand text-white hover:opacity-90" onclick="discover()" id="btnDiscover">↻ Descobrir</button>
+      <div class="ctl">
+        <div class="glass" style="display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:12px;">
+          <span class="muted" style="font-size:12px;">📱 Nº teste</span>
+          <input id="testNumber" style="width:150px" placeholder="vazio = cliente real" />
+          <button class="btn btn-ghost" onclick="saveTestNumber()">salvar</button>
+        </div>
+        <button class="btn btn-ghost" id="btnHealth" onclick="healthSelectors()" title="Confere se os seletores da MAG ainda funcionam">🩺</button>
+        <button class="btn btn-grad" id="btnDiscover" onclick="discover()">↻ Descobrir</button>
+        <button class="btn btn-ghost" id="btnRec" onclick="reconciliar()" title="Detecta quem já pagou (saiu da inadimplência)">✓ Reconciliar</button>
+        <button class="btn btn-ghost" onclick="logout()">sair</button>
+      </div>
+    </header>
+
+    <div class="banner glass" id="banner"></div>
+
+    <section class="grid5" id="kpis"></section>
+
+    <section class="grid3">
+      <div class="glass chart"><h3>Funil do pipeline</h3><canvas id="chFunnel" height="170"></canvas></div>
+      <div class="glass chart"><h3>Pagamentos por dia</h3><canvas id="chPag" height="170"></canvas></div>
+      <div class="glass chart"><h3>Status na MAG</h3><canvas id="chStatus" height="170"></canvas></div>
+      <div class="glass chart"><h3>Valor por etapa (R$)</h3><canvas id="chValor" height="170"></canvas></div>
+    </section>
+
+    <div class="tabs">
+      <div class="tab on" data-tab="pipeline" onclick="showTab('pipeline')">Pipeline</div>
+      <div class="tab" data-tab="conversas" onclick="showTab('conversas')">Conversas 💬</div>
+      <div class="tab" data-tab="auditoria" onclick="showTab('auditoria')">Auditoria</div>
     </div>
-  </header>
 
-  <div id="banner" class="hidden mb-4 text-sm rounded-lg px-4 py-2"></div>
+    <section class="glass" id="tab-pipeline" style="overflow:hidden">
+      <table>
+        <thead><tr>
+          <th>Cliente</th><th>Valor / Compet.</th><th>Destino do disparo</th>
+          <th>Status MAG</th><th>Etapa</th><th style="text-align:right">Ações</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="muted" style="display:none;padding:40px;text-align:center;font-size:13px">Nenhum cliente. Clique em "Descobrir".</div>
+    </section>
 
-  <!-- KPIs -->
-  <section class="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4" id="kpis"></section>
+    <section id="tab-conversas" style="display:none">
+      <div class="glass" style="padding:16px;margin-bottom:14px">
+        <h3 style="margin:0 0 4px">🧪 Simular resposta do cliente <span class="muted" style="font-weight:400;font-size:12px">(testar o agente sem ngrok)</span></h3>
+        <div class="muted" style="font-size:12px;margin-bottom:10px">Resolve o cliente pelo CPF e roda o agente: detecta intenção, age e responde (vai pro nº de teste).</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input id="simCpf" placeholder="CPF do cliente" style="flex:0 0 160px">
+          <input id="simTexto" placeholder='ex.: "consigo pagar semana que vem"' style="flex:1;min-width:240px">
+          <button class="btn btn-grad" id="btnSim" onclick="simular(this)">Simular ▶</button>
+        </div>
+        <div id="simOut" class="muted" style="font-size:12px;margin-top:8px"></div>
+      </div>
 
-  <!-- Charts -->
-  <section class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2 text-slate-600">Funil do pipeline</h3><canvas id="chFunnel" height="160"></canvas></div>
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2 text-slate-600">Status na MAG</h3><canvas id="chStatus" height="160"></canvas></div>
-    <div class="card p-4"><h3 class="text-sm font-semibold mb-2 text-slate-600">Valor por etapa (R$)</h3><canvas id="chValor" height="160"></canvas></div>
-  </section>
+      <div class="glass" style="overflow:hidden;margin-bottom:14px">
+        <div style="padding:12px 16px;font-weight:600">🗓️ Remarcações pendentes <span id="resCount" class="badge b-amber"></span></div>
+        <table><tbody id="resRows"></tbody></table>
+        <div id="resEmpty" class="muted" style="display:none;padding:24px;text-align:center;font-size:13px">Nenhuma remarcação pendente.</div>
+      </div>
 
-  <!-- Tabs -->
-  <div class="flex gap-2 mb-3">
-    <button class="btn tabbtn bg-white border" data-tab="pipeline" onclick="showTab('pipeline')">Pipeline</button>
-    <button class="btn tabbtn bg-white border" data-tab="auditoria" onclick="showTab('auditoria')">Auditoria</button>
+      <div class="glass" style="overflow:hidden">
+        <div style="padding:12px 16px;font-weight:600">💬 Mensagens recebidas</div>
+        <table>
+          <thead><tr><th>Quando</th><th>Cliente</th><th>Mensagem</th><th>Intenção</th><th>Desfecho</th></tr></thead>
+          <tbody id="inbRows"></tbody>
+        </table>
+        <div id="inbEmpty" class="muted" style="display:none;padding:24px;text-align:center;font-size:13px">Nenhuma mensagem recebida ainda.</div>
+      </div>
+    </section>
+
+    <section class="glass" id="tab-auditoria" style="overflow:hidden;display:none">
+      <table>
+        <thead><tr><th>Data</th><th>CPF</th><th>Canal</th><th>Resultado</th><th>Modo</th><th>Detalhe</th></tr></thead>
+        <tbody id="logRows"></tbody>
+      </table>
+    </section>
+
+    <p class="muted" style="font-size:11px;margin-top:16px">Régua MAG · dados locais · a trava de teste redireciona todo WhatsApp para o nº de teste.</p>
   </div>
 
-  <!-- Pipeline table -->
-  <section id="tab-pipeline" class="card overflow-hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-        <tr>
-          <th class="text-left p-3">Cliente</th>
-          <th class="text-left p-3">Valor / Compet.</th>
-          <th class="text-left p-3">Destino do disparo</th>
-          <th class="text-left p-3">Status MAG</th>
-          <th class="text-left p-3">Etapa</th>
-          <th class="text-right p-3">Ações</th>
-        </tr>
-      </thead>
-      <tbody id="rows"></tbody>
-    </table>
-    <div id="empty" class="hidden p-8 text-center text-slate-400 text-sm">Nenhum cliente. Clique em "Descobrir".</div>
-  </section>
-
-  <!-- Audit -->
-  <section id="tab-auditoria" class="card overflow-hidden hidden">
-    <table class="w-full text-sm">
-      <thead class="bg-slate-50 text-slate-500 text-xs uppercase">
-        <tr><th class="text-left p-3">Data</th><th class="text-left p-3">CPF</th><th class="text-left p-3">Canal</th>
-            <th class="text-left p-3">Resultado</th><th class="text-left p-3">Modo</th><th class="text-left p-3">Detalhe</th></tr>
-      </thead>
-      <tbody id="logRows"></tbody>
-    </table>
-  </section>
-
-  <p class="text-xs text-slate-400 mt-4">Régua MAG · dados locais (regua.sqlite) · trava de teste redireciona WhatsApp para o nº de teste.</p>
-</div>
-
 <script>
+Chart.defaults.color = '#8aa0c0';
+Chart.defaults.borderColor = 'rgba(255,255,255,.06)';
+Chart.defaults.font.family = 'Inter, sans-serif';
 const $ = s => document.querySelector(s);
 const fmt = n => new Intl.NumberFormat('pt-BR').format(n);
 let charts = {};
 
-function banner(msg, kind='info') {
-  const b = $('#banner');
-  b.className = 'mb-4 text-sm rounded-lg px-4 py-2 ' +
-    (kind==='err' ? 'bg-red-50 text-red-700 border border-red-200'
-     : kind==='ok' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-     : 'bg-blue-50 text-blue-700 border border-blue-200');
-  b.textContent = msg; b.classList.remove('hidden');
-  if (kind!=='err') setTimeout(()=>b.classList.add('hidden'), 5000);
+function banner(msg, kind='info'){
+  const b=$('#banner'); b.style.display='block';
+  const c={err:['rgba(244,63,94,.12)','#fda4af'],ok:['rgba(16,185,129,.12)','#6ee7b7'],info:['rgba(59,130,246,.12)','#93c5fd']}[kind];
+  b.style.background=c[0]; b.style.color=c[1]; b.textContent=msg;
+  if(kind!=='err') setTimeout(()=>b.style.display='none',5000);
 }
-
-async function api(path, opts) {
-  const r = await fetch(path, opts);
-  const data = await r.json().catch(()=>({}));
-  if (!r.ok) throw new Error(data.detail || ('HTTP '+r.status));
-  return data;
+async function api(path,opts){
+  const r=await fetch(path,opts);
+  if(r.status===401){ location.href='/login'; throw new Error('sessão expirada'); }
+  const d=await r.json().catch(()=>({}));
+  if(!r.ok) throw new Error(d.detail||('HTTP '+r.status));
+  return d;
 }
+const STAGE={ descoberto:['Descoberto','b-slate'], trabalhado_mag:['Já trabalhado (MAG)','b-violet'],
+  hold:['Link gerado (HOLD)','b-amber'], disparado:['Disparado','b-emer'],
+  resolvido:['Resolvido','b-blue'], opt_out:['Opt-out','b-red'] };
+const WORKST={ naoTrabalhado:['Não trabalhado','b-slate'], trabalhadoParcialmente:['Parcial','b-amber'], trabalhado:['Trabalhado','b-violet'] };
 
-const STAGE = {
-  descoberto:     ['Descoberto','bg-slate-100 text-slate-600'],
-  trabalhado_mag: ['Já trabalhado (MAG)','bg-violet-100 text-violet-700'],
-  hold:           ['Link gerado (HOLD)','bg-amber-100 text-amber-700'],
-  disparado:      ['Disparado','bg-emerald-100 text-emerald-700'],
-  resolvido:      ['Resolvido','bg-blue-100 text-blue-700'],
-  opt_out:        ['Opt-out','bg-red-100 text-red-700'],
-};
-const WORKST = {
-  naoTrabalhado: ['Não trabalhado','bg-slate-100 text-slate-600'],
-  trabalhadoParcialmente: ['Parcial','bg-amber-100 text-amber-700'],
-  trabalhado: ['Trabalhado','bg-violet-100 text-violet-700'],
-};
+function kpi(lbl,val,sub){ return `<div class="glass kpi"><div class="accent"></div>
+  <div class="lbl">${lbl}</div><div class="val">${val}</div><div class="sub">${sub||''}</div></div>`; }
 
-function kpi(label, value, sub) {
-  return `<div class="card p-4"><div class="text-xs text-slate-500">${label}</div>
-    <div class="text-2xl font-bold mt-1">${value}</div>
-    <div class="text-xs text-slate-400 mt-0.5">${sub||''}</div></div>`;
+async function refresh(){
+  const [m,cs]=await Promise.all([api('/api/metrics'),api('/api/clientes')]);
+  const su=m.sucesso, tmed=su.tempo_medio_horas;
+  const tlabel = tmed==null?'—':(tmed<48?tmed+'h':Math.round(tmed/24)+'d');
+  $('#kpis').innerHTML = kpi('Em régua',fmt(m.total_clientes),'clientes')
+    + kpi('Em aberto',m.valor_total,'inadimplente')
+    + kpi('Conversão',su.taxa_conversao+'%',`${su.convertidos}/${su.disparados} disparados`)
+    + kpi('Recuperado',su.valor_recuperado_atribuido,'atribuído ao disparo')
+    + kpi('Tempo médio',tlabel,'até pagar')
+    + kpi('Enviados hoje',fmt(m.enviados_hoje),'WhatsApp')
+    + kpi('Em HOLD',fmt(m.stages.hold),'aguardando disparo');
+  if($('#testNumber')!==document.activeElement) $('#testNumber').value=m.test_number||'';
+  drawCharts(m); drawRows(cs);
 }
-
-async function refresh() {
-  const [m, cs] = await Promise.all([api('/api/metrics'), api('/api/clientes')]);
-  $('#kpis').innerHTML =
-    kpi('Em régua', fmt(m.total_clientes), 'clientes') +
-    kpi('Em aberto', m.valor_total, 'valor inadimplente') +
-    kpi('Recuperado', m.valor_recuperado, m.taxa_resolucao+'% resolvido') +
-    kpi('Enviados hoje', fmt(m.enviados_hoje), 'WhatsApp') +
-    kpi('Em HOLD', fmt(m.stages.hold), 'aguardando disparo');
-  if ($('#testNumber') !== document.activeElement) $('#testNumber').value = m.test_number || '';
-  drawCharts(m);
-  drawRows(cs);
+function drawCharts(m){
+  const mk=(id,cfg)=>{ if(charts[id])charts[id].destroy(); charts[id]=new Chart($('#'+id),cfg); };
+  const st=m.stages, grid={grid:{color:'rgba(255,255,255,.05)'}};
+  mk('chFunnel',{type:'bar',data:{labels:['Descob.','Já trab.','HOLD','Disparado','Resolvido'],
+    datasets:[{data:[st.descoberto,st.trabalhado_mag,st.hold,st.disparado,st.resolvido],borderRadius:6,
+      backgroundColor:['#64748b','#8b5cf6','#f59e0b','#10b981','#3b82f6']}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0},...grid},x:grid}}});
+  const ws=m.work_status;
+  mk('chStatus',{type:'doughnut',data:{labels:['Não trab.','Parcial','Trabalhado','Outro'],
+    datasets:[{data:[ws.naoTrabalhado,ws.trabalhadoParcialmente,ws.trabalhado,ws.outro],borderWidth:0,
+      backgroundColor:['#64748b','#f59e0b','#8b5cf6','#334155']}]},options:{plugins:{legend:{position:'bottom',labels:{boxWidth:10}}},cutout:'62%'}});
+  const vp=m.valor_por_stage;
+  mk('chValor',{type:'bar',data:{labels:['Descob.','Já trab.','HOLD','Disparado','Resolvido'],
+    datasets:[{data:[vp.descoberto,vp.trabalhado_mag,vp.hold,vp.disparado,vp.resolvido].map(c=>c/100),borderRadius:6,
+      backgroundColor:'rgba(59,130,246,.7)'}]},options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,...grid},x:grid}}});
+  const pg=m.sucesso.pagamentos_por_dia||[];
+  mk('chPag',{type:'line',data:{labels:pg.map(p=>p.dia.slice(5)),
+    datasets:[{data:pg.map(p=>p.n),borderColor:'#10b981',backgroundColor:'rgba(16,185,129,.18)',fill:true,tension:.35,pointRadius:2}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0},...grid},x:grid}}});
 }
-
-function drawCharts(m) {
-  const mk = (id, cfg) => { if (charts[id]) charts[id].destroy(); charts[id] = new Chart($('#'+id), cfg); };
-  const st = m.stages;
-  mk('chFunnel', { type:'bar', data:{ labels:['Descob.','Já trab.','HOLD','Disparado','Resolvido'],
-    datasets:[{ data:[st.descoberto,st.trabalhado_mag,st.hold,st.disparado,st.resolvido],
-      backgroundColor:['#94a3b8','#8b5cf6','#f59e0b','#10b981','#0b5fff'] }] },
-    options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true,ticks:{precision:0}}} } });
-  const ws = m.work_status;
-  mk('chStatus', { type:'doughnut', data:{ labels:['Não trab.','Parcial','Trabalhado','Outro'],
-    datasets:[{ data:[ws.naoTrabalhado, ws.trabalhadoParcialmente, ws.trabalhado, ws.outro],
-      backgroundColor:['#94a3b8','#f59e0b','#8b5cf6','#cbd5e1'] }] },
-    options:{ plugins:{legend:{position:'bottom'}} } });
-  const vp = m.valor_por_stage;
-  mk('chValor', { type:'bar', data:{ labels:['Descob.','Já trab.','HOLD','Disparado','Resolvido'],
-    datasets:[{ data:[vp.descoberto,vp.trabalhado_mag,vp.hold,vp.disparado,vp.resolvido].map(c=>c/100),
-      backgroundColor:'#0b5fff' }] },
-    options:{ plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true}} } });
-}
-
-function drawRows(cs) {
-  const tb = $('#rows'); tb.innerHTML = '';
-  $('#empty').classList.toggle('hidden', cs.length>0);
-  for (const c of cs) {
-    const [stLabel, stCls] = STAGE[c.stage] || STAGE.descoberto;
-    const destBadge = c.destino_teste ? '<span class="badge bg-amber-100 text-amber-700 ml-1">teste</span>' : '';
-    const destWarn = c.destino && !c.destino_valido ? '<span class="badge bg-red-100 text-red-700 ml-1">inválido</span>' : '';
-    const [wsLabel, wsCls] = WORKST[c.work_status] || ['—','bg-slate-100 text-slate-500'];
-    const statusMag = `<span class="badge ${wsCls}">${wsLabel}</span>`;
-    const tr = document.createElement('tr');
-    tr.className = 'border-t';
-    tr.innerHTML = `
-      <td class="p-3"><div class="font-semibold">${c.nome}</div><div class="text-xs text-slate-400">${c.cpf_fmt}</div></td>
-      <td class="p-3"><div class="font-medium">${c.valor}</div><div class="text-xs text-slate-400">${c.competencia||'—'}</div></td>
-      <td class="p-3"><div class="font-mono text-xs">${c.destino||'—'}${destBadge}${destWarn}</div>
-        ${c.destino_teste && c.telefone ? `<div class="text-[11px] text-slate-400">cliente: ${c.telefone}</div>`:''}</td>
-      <td class="p-3">${statusMag}</td>
-      <td class="p-3"><span class="badge ${stCls}">${stLabel}</span>
-        ${c.link_pagamento ? `<a href="${c.link_pagamento}" target="_blank" class="block text-[11px] text-brand truncate max-w-[160px]">link ↗</a>`:''}</td>
-      <td class="p-3 text-right whitespace-nowrap">${actions(c)}</td>`;
+function drawRows(cs){
+  const tb=$('#rows'); tb.innerHTML=''; $('#empty').style.display=cs.length?'none':'block';
+  for(const c of cs){
+    const [sl,sc]=STAGE[c.stage]||STAGE.descoberto;
+    const [wl,wc]=WORKST[c.work_status]||['—','b-slate'];
+    const teste=c.destino_teste?'<span class="badge b-amber" style="margin-left:6px">teste</span>':'';
+    const inval=c.destino&&!c.destino_valido?'<span class="badge b-red" style="margin-left:6px">inválido</span>':'';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><div style="font-weight:600">${c.nome}</div><div class="muted mono">${c.cpf_fmt}</div></td>
+      <td><div style="font-weight:600">${c.valor}</div><div class="muted" style="font-size:11px">${c.competencia||'—'}</div></td>
+      <td><div class="mono">${c.destino||'—'}${teste}${inval}</div>${c.destino_teste&&c.telefone?`<div class="muted" style="font-size:11px">cliente: ${c.telefone}</div>`:''}</td>
+      <td><span class="badge ${wc}">${wl}</span></td>
+      <td><span class="badge ${sc}">${sl}</span>${c.link_pagamento?`<a href="${c.link_pagamento}" target="_blank" style="display:block;font-size:11px;max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">link ↗</a>`:''}</td>
+      <td style="text-align:right;white-space:nowrap">${actions(c)}</td>`;
     tb.appendChild(tr);
   }
 }
+function actions(c){
+  let h='';
+  if(c.stage==='descoberto') h+=`<button class="btn btn-amber" onclick="gerarLink('${c.cpf}',this)">Gerar link (HOLD)</button> `;
+  if(c.stage==='hold') h+=`<button class="btn btn-emer" onclick="disparar('${c.cpf}',this,false)">Disparar ▶</button> `;
+  if(c.stage==='disparado'){
+    h+=`<button class="btn btn-ghost" onclick="disparar('${c.cpf}',this,true)">Reenviar</button> `;
+    if(c.followup_enviado){ h+=`<span class="badge b-emer" style="opacity:.8">✓ follow-up</span> `; }
+    else { const cls=c.followup_elegivel?'btn-amber':'btn-ghost';
+           const tag=c.followup_elegivel?'⏰ Follow-up (dia 2)':'Follow-up';
+           h+=`<button class="btn ${cls}" onclick="followUp('${c.cpf}',this,false)" title="2º toque sutil; re-checa pagamento antes de enviar">${tag}</button> `; }
+  }
+  if(c.stage!=='opt_out'&&c.stage!=='resolvido') h+=`<button class="btn btn-danger" onclick="optout('${c.cpf}')">opt-out</button>`;
+  return h||'—';
+}
+async function withBtn(btn,label,fn){
+  const old=btn?btn.innerHTML:null;
+  if(btn){ btn.disabled=true; btn.innerHTML=`<span class="spin"></span> ${label}`; }
+  try{ await fn(); }catch(e){ banner(e.message,'err'); }
+  finally{ if(btn){ btn.disabled=false; btn.innerHTML=old; } try{ await refresh(); }catch(_){} }
+}
+async function discover(){ await withBtn($('#btnDiscover'),'descobrindo…',async()=>{
+  const r=await api('/api/discover',{method:'POST'}); banner(`Descoberta: ${r.descobertos} inadimplentes, ${r.novos} novos.`,'ok'); }); }
+async function reconciliar(){ await withBtn($('#btnRec'),'reconciliando…',async()=>{
+  const r=await api('/api/reconciliar',{method:'POST'});
+  const ext=r.sem_leitura?` (${r.sem_leitura} sem leitura)`:'';
+  banner(`Reconciliação: ${r.checados} verificados, ${r.resolvidos} pagaram 🎉${ext}. Fila: ${r.fila}.`,'ok'); }); }
+async function gerarLink(cpf,btn){
+  if(!confirm('⚠️ Gerar link clica "Cobrar inadimplência" na MAG e MOVE as competências para "Trabalhadas" — é IRREVERSÍVEL.\n\nConfirma gerar o link deste cliente?')) return;
+  await withBtn(btn,'gerando…',async()=>{
+    await api(`/api/clientes/${cpf}/gerar-link`,{method:'POST'}); banner('Link gerado — cliente em HOLD, pronto para disparar.','ok'); }); }
+async function disparar(cpf,btn,f){ await withBtn(btn,'disparando…',async()=>{
+  const r=await api(`/api/clientes/${cpf}/disparar?forcar=${f}`,{method:'POST'}); banner(`Disparado para ${r.destino} (msg ${r.message_id||'ok'}).`,'ok'); }); }
+async function followUp(cpf,btn,f){ await withBtn(btn,'checando + enviando…',async()=>{
+  const r=await api(`/api/clientes/${cpf}/follow-up?forcar=${f}`,{method:'POST'});
+  if(r.pago){ banner('Cliente já pagou! ✓ Marquei como resolvido (sem incomodar).','ok'); }
+  else { banner(`Follow-up (dia 2) enviado para ${r.destino} (msg ${r.message_id||'ok'}).`,'ok'); } }); }
+async function optout(cpf){ if(!confirm('Adicionar este CPF ao opt-out?')) return;
+  await withBtn(null,'',async()=>{ await api(`/api/clientes/${cpf}/optout`,{method:'POST'}); banner('Adicionado ao opt-out.','ok'); }); }
+async function saveTestNumber(){ await withBtn(null,'',async()=>{
+  const r=await api('/api/config/test-number',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({numero:$('#testNumber').value})});
+  banner(r.test_number?`Modo TESTE: tudo vai para ${r.test_number}.`:'Modo PRODUÇÃO: envia ao cliente real.','ok'); }); }
+async function logout(){ try{ await api('/api/logout',{method:'POST'}); }catch(_){} location.href='/login'; }
+async function healthSelectors(){ await withBtn($('#btnHealth'),'',async()=>{
+  const r=await api('/api/health/selectors');
+  if(r.ok===r.total) banner(`Seletores OK (${r.ok}/${r.total}).`,'ok');
+  else banner(`⚠️ ${r.total-r.ok} seletor(es) FALHANDO: ${r.falhas.map(f=>f.chave).join(', ')} — calibre antes de operar.`,'err');
+}); }
 
-function actions(c) {
-  const cpf = c.cpf;
-  let html = '';
-  if (c.stage === 'descoberto')
-    html += `<button class="btn bg-amber-500 text-white hover:opacity-90" onclick="gerarLink('${cpf}',this)">Gerar link (HOLD)</button>`;
-  if (c.stage === 'hold')
-    html += `<button class="btn bg-emerald-600 text-white hover:opacity-90" onclick="disparar('${cpf}',this,false)">Disparar ▶</button>`;
-  if (c.stage === 'disparado')
-    html += `<button class="btn bg-slate-100 hover:bg-slate-200" onclick="disparar('${cpf}',this,true)">Reenviar</button>`;
-  if (c.stage !== 'opt_out' && c.stage !== 'resolvido')
-    html += ` <button class="btn bg-white border text-red-600 hover:bg-red-50" onclick="optout('${cpf}')">opt-out</button>`;
-  return html || '—';
+function showTab(t){
+  $('#tab-pipeline').style.display=t==='pipeline'?'block':'none';
+  $('#tab-conversas').style.display=t==='conversas'?'block':'none';
+  $('#tab-auditoria').style.display=t==='auditoria'?'block':'none';
+  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.tab===t));
+  if(t==='auditoria') loadLog();
+  if(t==='conversas') loadConversas();
 }
-
-async function withBtn(btn, label, fn) {
-  const old = btn ? btn.innerHTML : null;
-  if (btn) { btn.disabled = true; btn.innerHTML = `<span class="spin"></span> ${label}`; }
-  try { await fn(); }
-  catch (e) { banner(e.message, 'err'); }
-  finally { if (btn) { btn.disabled = false; btn.innerHTML = old; } await refresh(); }
+const INTENT={ SAIR:['SAIR','b-red'], JA_PAGUEI:['Já paguei','b-emer'], RESCHEDULE:['Remarcar','b-amber'],
+  NOVO_LINK:['Novo link','b-blue'], SAUDACAO:['Saudação','b-slate'], DUVIDA:['Dúvida','b-violet'] };
+async function loadConversas(){
+  const [inb,res]=await Promise.all([api('/api/inbound?limit=60'),api('/api/reschedules')]);
+  const ped=res.pedidos||[];
+  $('#resCount').textContent=ped.length;
+  $('#resEmpty').style.display=ped.length?'none':'block';
+  $('#resRows').innerHTML=ped.map(p=>`<tr>
+    <td><div style="font-weight:600">${p.cpf_fmt||p.cpf}</div><div class="muted" style="font-size:11px">pedido #${p.id}</div></td>
+    <td><div>data desejada: <b>${(p.data_desejada||'—').split('-').reverse().join('/')}</b></div>
+        <div class="muted" style="font-size:11px;max-width:320px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">"${p.texto_origem||''}"</div></td>
+    <td><span class="badge ${p.status==='admin_avisado'?'b-amber':'b-slate'}">${p.status}</span></td>
+    <td style="text-align:right"><button class="btn btn-emer" onclick="reenviarLink(${p.id},this)" title="Reenvia ao cliente o link de pagamento salvo">Reenviar link</button></td>
+  </tr>`).join('');
+  const ms=inb.mensagens||[];
+  $('#inbEmpty').style.display=ms.length?'none':'block';
+  $('#inbRows').innerHTML=ms.map(m=>{ const [il,ic]=INTENT[m.intent]||[m.intent,'b-slate'];
+    return `<tr>
+    <td class="muted" style="font-size:11px;white-space:nowrap">${(m.recebido_em||'').replace('T',' ').slice(5,16)}</td>
+    <td>${m.cpf_fmt?`<span class="mono">${m.cpf_fmt}</span>`:'<span class="muted">—</span>'}${m.origem==='simulacao'?'<span class="badge b-slate" style="margin-left:4px;font-size:9px">teste</span>':''}</td>
+    <td style="max-width:340px"><div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${m.texto||''}</div></td>
+    <td><span class="badge ${ic}">${il}</span></td>
+    <td class="muted" style="font-size:11px">${m.outcome||''}</td></tr>`; }).join('');
 }
-
-async function discover() {
-  const btn = $('#btnDiscover');
-  await withBtn(btn, 'descobrindo…', async () => {
-    const r = await api('/api/discover', {method:'POST'});
-    banner(`Descoberta: ${r.descobertos} inadimplentes, ${r.novos} novos.`, 'ok');
-  });
+async function simular(btn){
+  const cpf=$('#simCpf').value.trim(), texto=$('#simTexto').value.trim();
+  if(!cpf||!texto){ banner('Preencha CPF e mensagem.','err'); return; }
+  await withBtn(btn,'rodando…',async()=>{
+    const r=await api('/api/inbound/simular',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({cpf,texto})});
+    $('#simOut').innerHTML=`→ intenção: <b>${r.intent}</b> · desfecho: <b>${r.outcome}</b>${r.data_desejada?` · data: ${r.data_desejada.split('-').reverse().join('/')}`:''}`;
+    $('#simTexto').value=''; banner(`Agente: ${r.intent} → ${r.outcome}.`,'ok'); loadConversas(); });
 }
-async function gerarLink(cpf, btn) {
-  await withBtn(btn, 'gerando…', async () => {
-    await api(`/api/clientes/${cpf}/gerar-link`, {method:'POST'});
-    banner('Link gerado — cliente em HOLD, pronto para disparar.', 'ok');
-  });
+async function reenviarLink(id,btn){ await withBtn(btn,'reenviando…',async()=>{
+  const r=await api(`/api/reschedules/${id}/regenerar-link`,{method:'POST'});
+  banner(`Link reenviado ao cliente (${r.cpf}).`,'ok'); loadConversas(); }); }
+async function loadLog(){
+  const rows=await api('/api/log?limit=80');
+  $('#logRows').innerHTML=rows.map(r=>`<tr><td class="muted" style="font-size:11px">${(r.data||'').replace('T',' ').replace('Z','')}</td>
+    <td class="mono">${r.cpf}</td><td>${r.canal}</td><td>${r.resultado}</td><td>${r.modo}</td>
+    <td class="muted" style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.payload_resumo||''}</td></tr>`).join('');
 }
-async function disparar(cpf, btn, forcar) {
-  await withBtn(btn, 'disparando…', async () => {
-    const r = await api(`/api/clientes/${cpf}/disparar?forcar=${forcar}`, {method:'POST'});
-    banner(`Disparado para ${r.destino} (msg ${r.message_id||'ok'}).`, 'ok');
-  });
-}
-async function optout(cpf) {
-  if (!confirm('Adicionar este CPF ao opt-out? Ele não será mais contatado.')) return;
-  await withBtn(null, '', async () => {
-    await api(`/api/clientes/${cpf}/optout`, {method:'POST'});
-    banner('Adicionado ao opt-out.', 'ok');
-  });
-}
-async function saveTestNumber() {
-  await withBtn(null, '', async () => {
-    const r = await api('/api/config/test-number', {method:'POST',
-      headers:{'Content-Type':'application/json'}, body: JSON.stringify({numero: $('#testNumber').value})});
-    banner(r.test_number ? `Modo TESTE: tudo vai para ${r.test_number}.` : 'Modo PRODUÇÃO: envia ao cliente real.', 'ok');
-  });
-}
-
-function showTab(t) {
-  $('#tab-pipeline').classList.toggle('hidden', t!=='pipeline');
-  $('#tab-auditoria').classList.toggle('hidden', t!=='auditoria');
-  document.querySelectorAll('.tabbtn').forEach(b =>
-    b.classList.toggle('!bg-brand', b.dataset.tab===t) || b.classList.toggle('!text-white', b.dataset.tab===t));
-  if (t==='auditoria') loadLog();
-}
-async function loadLog() {
-  const rows = await api('/api/log?limit=80');
-  $('#logRows').innerHTML = rows.map(r => `<tr class="border-t">
-    <td class="p-3 text-xs text-slate-500">${(r.data||'').replace('T',' ').replace('Z','')}</td>
-    <td class="p-3 font-mono text-xs">${r.cpf}</td><td class="p-3">${r.canal}</td>
-    <td class="p-3">${r.resultado}</td><td class="p-3">${r.modo}</td>
-    <td class="p-3 text-xs text-slate-500 truncate max-w-[260px]">${r.payload_resumo||''}</td></tr>`).join('');
-}
-
-showTab('pipeline');
-refresh().catch(e => banner(e.message,'err'));
-setInterval(() => refresh().catch(()=>{}), 15000);
+refresh().catch(e=>banner(e.message,'err'));
+setInterval(()=>refresh().catch(()=>{}),15000);
 </script>
 </body>
 </html>

@@ -16,6 +16,9 @@ logs/
 reports/
 artifacts/
 
+# Scratch de workflows
+.wf/
+
 # Python
 __pycache__/
 *.py[cod]

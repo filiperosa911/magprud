@@ -73,7 +73,9 @@ python -m seguros --dashboard
 ## Dashboard (painel do gestor)
 
 `python -m seguros --dashboard` sobe um painel local (FastAPI) e abre o navegador.
-Ele é os "olhos do gestor" e controla a **jornada de cada cliente** em etapas:
+Tem **tela de login** (futurista) — senha em `DASHBOARD_PASSWORD` (vazio = provisório,
+qualquer senha entra). Ele é os "olhos do gestor" e controla a **jornada de cada
+cliente** em etapas:
 
 - **KPIs + gráficos**: valor em aberto, recuperado, taxa de resolução, funil do
   pipeline, consentimento, valor por etapa.

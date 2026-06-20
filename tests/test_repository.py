@@ -69,6 +69,53 @@ def test_log_record(conn):
     assert cur.fetchone()["n"] == 1
 
 
+def test_mark_resolved_atribuido(conn):
+    repo = ReguaRepository(conn, "local")
+    repo.insert_enrollment(_cliente())  # valor 25990
+    repo.mark_whatsapp_sent("11111111111")  # seta primeiro_disparo_em
+    r = repo.mark_resolved("11111111111")
+    assert r["first_time"] is True
+    assert r["atribuida"] is True
+    assert r["tempo_horas"] is not None and r["tempo_horas"] >= 0
+    c = repo.get("11111111111")
+    assert c.status is ReguaStatus.RESOLVIDO
+    assert c.resolvido_em is not None
+    assert c.conversao_atribuida is True
+    assert c.valor_recuperado_cents == 25990
+    # idempotente
+    assert repo.mark_resolved("11111111111")["first_time"] is False
+
+
+def test_mark_resolved_sem_disparo_nao_atribui(conn):
+    repo = ReguaRepository(conn, "local")
+    repo.insert_enrollment(_cliente("22222222222"))
+    r = repo.mark_resolved("22222222222")  # sem disparo
+    assert r["first_time"] is True
+    assert r["atribuida"] is False
+    assert r["tempo_horas"] is None
+
+
+def test_mark_follow_up_sent(conn):
+    repo = ReguaRepository(conn, "local")
+    repo.insert_enrollment(_cliente("44444444444"))
+    assert repo.get("44444444444").follow_up_enviado_em is None
+    repo.mark_follow_up_sent("44444444444")
+    assert repo.get("44444444444").follow_up_enviado_em is not None
+
+
+def test_due_for_recheck(conn):
+    repo = ReguaRepository(conn, "local")
+    repo.insert_enrollment(_cliente("33333333333"))
+    # sem disparo -> não entra na fila
+    assert repo.due_for_recheck() == []
+    repo.mark_whatsapp_sent("33333333333")
+    fila = {c.cpf for c in repo.due_for_recheck()}
+    assert "33333333333" in fila
+    repo.touch_check("33333333333")
+    # após o check, sai da fila (dentro de min_hours)
+    assert "33333333333" not in {c.cpf for c in repo.due_for_recheck()}
+
+
 def test_corretor_id_isola(conn):
     a = ReguaRepository(conn, "corretorA")
     b = ReguaRepository(conn, "corretorB")

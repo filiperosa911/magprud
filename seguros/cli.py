@@ -276,6 +276,12 @@ def _run_dashboard(config, port: int) -> int:
     print(f"  │  Régua MAG — painel em {url:<23}│")
     print("  │  (Ctrl+C para encerrar)                       │")
     print("  ╰───────────────────────────────────────────────╯\n")
+    # Segurança (must-fix #5): o painel tem auth fraca. Se for receber webhooks
+    # reais (ngrok), exponha SOMENTE /webhook/* e use uma senha não-vazia.
+    if config.zapi_webhook_secret and not config.dashboard_password:
+        print("  ⚠️  ATENÇÃO: webhook configurado mas DASHBOARD_PASSWORD está vazio.")
+        print("     Antes de expor via ngrok, defina DASHBOARD_PASSWORD e tunele só /webhook/*.\n")
+
     threading.Timer(1.2, lambda: webbrowser.open(url)).start()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
     return 0

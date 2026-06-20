@@ -254,6 +254,26 @@ class MagConnector(SeguradoraConnector):
         return ClientStatus(cpf, competencias=(comp,), all_regularized=all_reg,
                             checked_at=now_utc())
 
+    def check_client_inadimplente_cents(self, cpf: str) -> int | None:
+        """Lê o "Valor inadimplente" na tela do cliente (Meus Clientes -> detalhe).
+        Retorna centavos (0 = pagou tudo) ou None se não conseguir ler.
+
+        Sinal CONFIÁVEL de pagamento: a tela do cliente é acessível mesmo depois de
+        o inadimplente sair da lista de inadimplência (que ocorre já ao "Cobrar").
+        """
+        cpf = normalize_cpf(cpf)
+        if not self._goto_client_detail_via_search(cpf):
+            return None
+        wait_settled(self.page, self.selectors)
+        try:
+            item = self.page.locator("c-consolidated-item").filter(
+                has_text="Valor inadimplente"
+            ).first
+            txt = item.inner_text(timeout=6000)
+        except (PlaywrightTimeout, PlaywrightError):
+            return None
+        return _parse_valor_brl(txt)
+
     # --- helpers DOM ---------------------------------------------------------
 
     def _open_cliente_detail(self, cpf: str) -> bool:
@@ -330,6 +350,15 @@ class MagConnector(SeguradoraConnector):
             log.debug("screenshot de debug salvo: %s", label)
         except Exception:  # noqa: BLE001
             pass
+
+
+def _parse_valor_brl(text: str) -> int | None:
+    """Extrai 'R$ <int>,<dec>' (mesmo com espaços/nbsp) -> centavos. Ex.: 'R$ 0,00' -> 0."""
+    t = (text or "").replace("\xa0", " ")
+    m = re.search(r"R\$\s*([\d.]+)\s*,\s*(\d{2})", t)
+    if not m:
+        return None
+    return int(m.group(1).replace(".", "")) * 100 + int(m.group(2))
 
 
 def _count_competencias(text: str, termo: str) -> int:

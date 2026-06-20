@@ -45,6 +45,7 @@ class Config:
     corretor_id: str
     nome_corretor: str
     nome_corretora: str
+    dashboard_password: str  # senha do painel (vazio = login provisório, qualquer senha)
 
     # caminhos / sessão
     db_path: Path
@@ -63,6 +64,13 @@ class Config:
     # FASE DE TESTE: se preenchido, TODO WhatsApp vai para este número (o do
     # corretor), NUNCA para o do cliente. Esvazie para enviar de verdade aos clientes.
     whatsapp_override_to: str
+
+    # agente inbound (webhook Z-API)
+    admin_whatsapp: str  # número do admin p/ avisos (vazio = cai no notify_whatsapp_to)
+    zapi_webhook_secret: str  # segredo no path do webhook; vazio = webhook REJEITA tudo
+    usar_llm_intent: bool  # liga o seam LLM p/ frases ambíguas (precisa anthropic_api_key)
+    anthropic_api_key: str
+    reschedule_max_dias: int  # teto de dias p/ a data desejada de remarcação
 
     # Gmail
     gmail_address: str
@@ -178,6 +186,7 @@ def load_config(*, live: bool, env_path: str | None = None) -> Config:
         corretor_id=os.environ.get("CORRETOR_ID", "local").strip() or "local",
         nome_corretor=nome_corretor,
         nome_corretora=nome_corretora,
+        dashboard_password=os.environ.get("DASHBOARD_PASSWORD", "").strip(),
         db_path=Path(os.environ.get("DB_PATH", "./regua.sqlite").strip()),
         user_data_dir=Path(
             os.environ.get("PLAYWRIGHT_USER_DATA_DIR", "./.mag_session").strip()
@@ -192,6 +201,11 @@ def load_config(*, live: bool, env_path: str | None = None) -> Config:
         # FASE DE TESTE: se setado no .env, redireciona todo WhatsApp para este
         # número (o do corretor). Vazio = envia ao cliente real (produção).
         whatsapp_override_to=os.environ.get("WHATSAPP_OVERRIDE_TO", "").strip(),
+        admin_whatsapp=os.environ.get("ADMIN_WHATSAPP", "").strip(),
+        zapi_webhook_secret=os.environ.get("ZAPI_WEBHOOK_SECRET", "").strip(),
+        usar_llm_intent=_as_bool(os.environ.get("USAR_LLM_INTENT"), False),
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", "").strip(),
+        reschedule_max_dias=_as_int(os.environ.get("RESCHEDULE_MAX_DIAS"), 30),
         gmail_address=gmail_address,
         gmail_app_password=gmail_app_password,
         timezone=timezone,

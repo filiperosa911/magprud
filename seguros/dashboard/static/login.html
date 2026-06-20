@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Régua MAG — Acesso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+<style>
+  :root { --blue:#3b82f6; --violet:#8b5cf6; --cyan:#22d3ee; }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { height:100%; }
+  body {
+    font-family:'Inter',system-ui,sans-serif; color:#e7ecf5;
+    background:#05070f; overflow:hidden; position:relative;
+  }
+  /* canvas constelação */
+  #bg { position:fixed; inset:0; z-index:0; }
+  /* auroras */
+  .aurora { position:fixed; border-radius:50%; filter:blur(90px); opacity:.55; z-index:0; pointer-events:none; animation:float 18s ease-in-out infinite; }
+  .a1 { width:520px;height:520px; background:radial-gradient(circle,#1d4ed8,transparent 70%); top:-160px; left:-120px; }
+  .a2 { width:560px;height:560px; background:radial-gradient(circle,#7c3aed,transparent 70%); bottom:-200px; right:-140px; animation-delay:-6s; }
+  .a3 { width:420px;height:420px; background:radial-gradient(circle,#06b6d4,transparent 70%); top:40%; left:55%; opacity:.35; animation-delay:-11s; }
+  @keyframes float { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(40px,-30px) scale(1.08)} }
+  /* grid em perspectiva (chão futurista) */
+  .grid { position:fixed; left:0; right:0; bottom:0; height:42vh; z-index:0; pointer-events:none;
+    background-image:linear-gradient(rgba(59,130,246,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(59,130,246,.18) 1px,transparent 1px);
+    background-size:46px 46px; transform:perspective(420px) rotateX(62deg); transform-origin:bottom;
+    mask-image:linear-gradient(transparent,#000 60%); -webkit-mask-image:linear-gradient(transparent,#000 60%); }
+  /* card */
+  .wrap { position:relative; z-index:2; height:100%; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .card { width:min(410px,92vw); padding:40px 34px;
+    background:linear-gradient(160deg,rgba(20,27,45,.78),rgba(11,16,30,.72));
+    border:1px solid rgba(255,255,255,.08); border-radius:22px;
+    backdrop-filter:blur(18px); -webkit-backdrop-filter:blur(18px);
+    box-shadow:0 30px 80px -20px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.06);
+    position:relative; }
+  .card::before { content:''; position:absolute; inset:-1px; border-radius:22px; padding:1px;
+    background:linear-gradient(120deg,var(--blue),var(--violet),var(--cyan)); opacity:.5;
+    -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+    -webkit-mask-composite:xor; mask-composite:exclude; pointer-events:none; }
+  .logo { display:flex; align-items:center; gap:12px; margin-bottom:6px; }
+  .orb { width:46px;height:46px;border-radius:13px; background:conic-gradient(from 180deg,var(--blue),var(--violet),var(--cyan),var(--blue));
+    display:grid;place-items:center; font-weight:900; font-size:20px; color:#0b1020;
+    box-shadow:0 0 30px rgba(59,130,246,.6); animation:pulse 3.5s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 24px rgba(59,130,246,.5)} 50%{box-shadow:0 0 44px rgba(124,58,237,.75)} }
+  h1 { font-family:'Space Grotesk',sans-serif; font-size:21px; font-weight:700; letter-spacing:-.3px; }
+  h1 span { background:linear-gradient(90deg,var(--blue),var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub { color:#8aa0c0; font-size:13px; margin:14px 0 26px; }
+  label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#7e93b4; margin-bottom:7px; }
+  .field { position:relative; margin-bottom:18px; }
+  input { width:100%; padding:13px 14px; border-radius:12px; color:#eaf0fb; font-size:15px;
+    background:rgba(8,12,22,.7); border:1px solid rgba(255,255,255,.1); outline:none; transition:.2s; }
+  input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,.18); }
+  button { width:100%; padding:13px; border:0; border-radius:12px; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
+    background:linear-gradient(100deg,var(--blue),var(--violet)); transition:.2s; box-shadow:0 10px 30px -8px rgba(59,130,246,.6); }
+  button:hover { transform:translateY(-1px); box-shadow:0 16px 40px -8px rgba(124,58,237,.7); }
+  button:disabled { opacity:.6; cursor:wait; }
+  .err { color:#fda4af; font-size:13px; margin-top:14px; min-height:18px; text-align:center; }
+  .badge { display:inline-block; margin-top:14px; font-size:11px; color:#7e93b4; padding:4px 10px; border:1px solid rgba(255,255,255,.1); border-radius:9999px; }
+</style>
+</head>
+<body>
+  <canvas id="bg"></canvas>
+  <div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div>
+  <div class="grid"></div>
+
+  <div class="wrap">
+    <form class="card" onsubmit="return doLogin(event)">
+      <div class="logo">
+        <div class="orb">R</div>
+        <div>
+          <h1>Régua <span>MAG</span></h1>
+          <div style="font-size:11px;color:#7e93b4;letter-spacing:2px;">COBRANÇA INTELIGENTE</div>
+        </div>
+      </div>
+      <p class="sub">Painel de controle da jornada de cobrança. Acesse para gerir seus inadimplentes.</p>
+
+      <div class="field">
+        <label for="senha">Senha de acesso</label>
+        <input id="senha" type="password" autocomplete="current-password" placeholder="••••••••" autofocus />
+      </div>
+      <button id="btn" type="submit">Entrar →</button>
+      <div class="err" id="err"></div>
+      <div style="text-align:center"><span class="badge">🔒 acesso local · dados na sua máquina</span></div>
+    </form>
+  </div>
+
+<script>
+// ---- constelação ----
+const cv = document.getElementById('bg'), ctx = cv.getContext('2d');
+let W, H, pts, mouse = {x:-999,y:-999};
+function resize(){ W=cv.width=innerWidth; H=cv.height=innerHeight;
+  const n = Math.min(120, Math.floor(W*H/14000));
+  pts = Array.from({length:n}, () => ({ x:Math.random()*W, y:Math.random()*H,
+    vx:(Math.random()-.5)*.35, vy:(Math.random()-.5)*.35 })); }
+addEventListener('resize', resize);
+addEventListener('mousemove', e => { mouse.x=e.clientX; mouse.y=e.clientY; });
+function tick(){
+  ctx.clearRect(0,0,W,H);
+  for (const p of pts){ p.x+=p.vx; p.y+=p.vy;
+    if(p.x<0||p.x>W)p.vx*=-1; if(p.y<0||p.y>H)p.vy*=-1; }
+  const all = pts.concat([mouse]);
+  for (let i=0;i<all.length;i++) for (let j=i+1;j<all.length;j++){
+    const a=all[i], b=all[j], d=Math.hypot(a.x-b.x,a.y-b.y);
+    if (d<140){ const o=(1-d/140); ctx.strokeStyle=`rgba(96,150,255,${o*.5})`;
+      ctx.lineWidth=o*1.1; ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke(); } }
+  for (const p of pts){ ctx.fillStyle='rgba(140,180,255,.85)'; ctx.beginPath();
+    ctx.arc(p.x,p.y,1.6,0,7); ctx.fill(); }
+  requestAnimationFrame(tick);
+}
+resize(); tick();
+
+// ---- login ----
+async function doLogin(e){
+  e.preventDefault();
+  const btn=document.getElementById('btn'), err=document.getElementById('err');
+  btn.disabled=true; btn.textContent='Entrando…'; err.textContent='';
+  try{
+    const r = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({senha:document.getElementById('senha').value})});
+    if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.detail||'Falha no acesso'); }
+    location.href='/';
+  }catch(ex){ err.textContent=ex.message; btn.disabled=false; btn.textContent='Entrar →'; }
+  return false;
+}
+</script>
+</body>
+</html>
