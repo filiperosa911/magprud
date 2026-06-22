@@ -824,25 +824,32 @@ class DashboardService:
             conn.close()
         return {"ok": True, "cpf": cpf}
 
-    # Seletores que DEVEM resolver nas telas de LISTA (se quebrarem, a descoberta
-    # quebra). Os de detalhe/modal/login só aparecem em telas específicas.
-    _CRITICOS = {
-        "auth.logged_in_marker", "inadimplencias.table", "inadimplencias.row",
-        "inadimplencias.empty_state", "clientes.search_input",
-    }
+    # Seletores que DEVEM resolver SEMPRE na tela de lista (se quebrarem, a
+    # descoberta quebra). Os de detalhe/modal/login só aparecem em telas específicas.
+    _CRITICOS = {"auth.logged_in_marker", "inadimplencias.table", "clientes.search_input"}
+    # Par OU: a lista "renderizou" se houver LINHA (com dados) OU ESTADO-VAZIO (sem
+    # dados). São mutuamente exclusivos — exigir os dois daria alarme falso diário.
+    _CRITICOS_LISTA = ("inadimplencias.row", "inadimplencias.empty_state")
 
     def health_selectors(self) -> dict:
-        """Smoke test (read-only): foca nos seletores CRÍTICOS da lista."""
+        """Smoke test (read-only): seletores CRÍTICOS da lista. O par linha/estado-
+        vazio conta como UMA checagem (basta um resolver — a lista renderizou)."""
         from ..connectors.mag.inspect_mode import validate_selectors
 
         results = self._mag(lambda c: validate_selectors(c))
-        criticos = [(k, p, d) for k, p, d in results if k in self._CRITICOS]
-        falhas = [{"chave": k, "detalhe": d} for k, p, d in criticos if not p]
+        passou = {k: p for k, p, _ in results}
+        detalhe = {k: d for k, _, d in results}
+        falhas = [{"chave": k, "detalhe": detalhe.get(k, "")}
+                  for k in self._CRITICOS if not passou.get(k)]
+        if not any(passou.get(k) for k in self._CRITICOS_LISTA):  # nem linha nem vazio
+            falhas.append({"chave": "inadimplencias.lista",
+                           "detalhe": "nem linha nem estado-vazio resolveram"})
+        total = len(self._CRITICOS) + 1  # os obrigatórios + o par-OU da lista
         return {
-            "ok": sum(1 for _, p, _ in criticos if p),
-            "total": len(criticos),
+            "ok": total - len(falhas),
+            "total": total,
             "falhas": falhas,
-            "contextuais": len(results) - len(criticos),  # detalhe/modal/login (não checados aqui)
+            "contextuais": len(results) - len(self._CRITICOS) - len(self._CRITICOS_LISTA),
         }
 
     # --- revisão matinal automática do DOM ----------------------------------
