@@ -1,9 +1,12 @@
-# Régua de cobrança de inadimplência — Seguros (MAG + Z-API)
+# Régua de cobrança de inadimplência — Seguros (MAG + Prudential + Z-API)
+
+> 👋 **Novo no projeto? Comece por [docs/COMECE-AQUI.md](docs/COMECE-AQUI.md)** —
+> guia de acesso do zero até rodar tudo (inclusive offline, sem credenciais).
 
 Ferramenta **local** para corretor de seguros automatizar a cobrança de clientes
-inadimplentes. Hoje integra a **MAG Seguros** (Plataforma dos Produtores) ponta a
-ponta; a **Prudential** (Life Planner) está em exploração (ver
-[Multi-seguradora](#multi-seguradora-prudential-em-andamento)).
+inadimplentes. Integra a **MAG Seguros** (Plataforma dos Produtores) ponta a ponta
+e a **Prudential** (Life Planner) — calibrada e em modo lembrete (ver
+[Multi-seguradora](#multi-seguradora-mag--prudential)).
 
 O que ela faz, por cliente, numa **régua de cobrança**:
 
