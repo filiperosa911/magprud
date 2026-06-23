@@ -9,7 +9,10 @@ regua.sqlite-shm
 *.sqlite-*
 
 # Sessão persistente do Playwright (cookies de login — NUNCA commitar)
+# Cobre .mag_session/, .prudential_session/ e qualquer outra seguradora.
 .mag_session/
+.prudential_session/
+*_session/
 
 # Saídas
 logs/
