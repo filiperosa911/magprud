@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Régua MAG — Acesso</title>
+<title>Régua de Cobrança — Acesso</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;800;900&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
 <style>
@@ -49,9 +49,11 @@
   .sub { color:#8aa0c0; font-size:13px; margin:14px 0 26px; }
   label { display:block; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:#7e93b4; margin-bottom:7px; }
   .field { position:relative; margin-bottom:18px; }
-  input { width:100%; padding:13px 14px; border-radius:12px; color:#eaf0fb; font-size:15px;
+  input, select { width:100%; padding:13px 14px; border-radius:12px; color:#eaf0fb; font-size:15px;
     background:rgba(8,12,22,.7); border:1px solid rgba(255,255,255,.1); outline:none; transition:.2s; }
-  input:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,.18); }
+  select { appearance:none; -webkit-appearance:none; cursor:pointer; }
+  select option { background:#0b1020; color:#eaf0fb; }
+  input:focus, select:focus { border-color:var(--blue); box-shadow:0 0 0 3px rgba(59,130,246,.18); }
   button { width:100%; padding:13px; border:0; border-radius:12px; cursor:pointer; color:#fff; font-weight:700; font-size:15px;
     background:linear-gradient(100deg,var(--blue),var(--violet)); transition:.2s; box-shadow:0 10px 30px -8px rgba(59,130,246,.6); }
   button:hover { transform:translateY(-1px); box-shadow:0 16px 40px -8px rgba(124,58,237,.7); }
@@ -70,12 +72,19 @@
       <div class="logo">
         <div class="orb">R</div>
         <div>
-          <h1>Régua <span>MAG</span></h1>
+          <h1>Régua <span>Seguros</span></h1>
           <div style="font-size:11px;color:#7e93b4;letter-spacing:2px;">COBRANÇA INTELIGENTE</div>
         </div>
       </div>
-      <p class="sub">Painel de controle da jornada de cobrança. Acesse para gerir seus inadimplentes.</p>
+      <p class="sub">Painel de controle da jornada de cobrança. Escolha a seguradora e acesse para gerir seus inadimplentes.</p>
 
+      <div class="field">
+        <label for="insurer">Seguradora</label>
+        <select id="insurer">
+          <option value="mag">MAG Seguros</option>
+          <option value="prudential">Prudential (em calibração)</option>
+        </select>
+      </div>
       <div class="field">
         <label for="senha">Senha de acesso</label>
         <input id="senha" type="password" autocomplete="current-password" placeholder="••••••••" autofocus />
@@ -118,7 +127,8 @@ async function doLogin(e){
   btn.disabled=true; btn.textContent='Entrando…'; err.textContent='';
   try{
     const r = await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({senha:document.getElementById('senha').value})});
+      body:JSON.stringify({senha:document.getElementById('senha').value,
+        insurer:document.getElementById('insurer').value})});
     if(!r.ok){ const d=await r.json().catch(()=>({})); throw new Error(d.detail||'Falha no acesso'); }
     location.href='/';
   }catch(ex){ err.textContent=ex.message; btn.disabled=false; btn.textContent='Entrar →'; }

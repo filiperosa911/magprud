@@ -17,6 +17,7 @@ import logging
 from .clock import iso_utc, now_in, within_send_window
 from .config import Config
 from .connectors.base import Delinquent, SeguradoraConnector
+from .connectors.factory import insurer_has_payment_link
 from .cpf import normalize_cpf
 from .domain.models import Canal, ClienteRegua, Modo, ReguaStatus, Resultado
 from .domain.state import evaluate, evaluate_email
@@ -24,9 +25,13 @@ from .messaging.email import SmtpAuthError
 from .messaging.phone import canonical_brazilian_phone, is_plausible_email, is_valid_whatsapp
 from .messaging.templates import (
     EMAIL_DIA2_ASSUNTO,
+    EMAIL_DIA2_ASSUNTO_LEMBRETE,
     EMAIL_DIA2_HTML,
+    EMAIL_DIA2_HTML_LEMBRETE,
     EMAIL_DIA2_TEXTO,
+    EMAIL_DIA2_TEXTO_LEMBRETE,
     WHATSAPP_DIA0,
+    WHATSAPP_DIA0_LEMBRETE,
     brl_from_cents,
     primeiro_nome,
     render,
@@ -69,6 +74,9 @@ class Orchestrator:
         self.notifier = notifier
         self.limit = limit
         self.modo = Modo.LIVE if config.live else Modo.DRY_RUN
+        # Seguradora sem link (Prudential): régua = LEMBRETE (templates sem link,
+        # gate não exige link). Fonte única: capability por seguradora.
+        self._requer_link = insurer_has_payment_link(config.insurer)
 
         self._sends = 0
         self._wa_passed = 0  # contam para o teto diário de WhatsApp
@@ -233,12 +241,14 @@ class Orchestrator:
         # MODO TESTE (override): valida o telefone do DESTINO (o próprio número).
         destino_valido = is_valid_whatsapp(override) if override else is_valid_whatsapp(cliente.telefone)
 
+        template = WHATSAPP_DIA0 if self._requer_link else WHATSAPP_DIA0_LEMBRETE
         ctx = self._ctx(cliente, link_efetivo)
-        mensagem = render(WHATSAPP_DIA0, ctx)
+        mensagem = render(template, ctx)
         decision = evaluate(
             Canal.WHATSAPP, opted_out=opted_out, tem_link=tem_link,
             destino_valido=destino_valido,
             ja_enviado=cliente.whatsapp_enviado_em is not None, window_open=window_open,
+            requer_link=self._requer_link,
         )
 
         if not decision.should_send:
@@ -287,13 +297,17 @@ class Orchestrator:
             tem_link = True  # em dry-run o link já teria sido gerado no dia 0
             link_efetivo = cliente.link_pagamento or PLACEHOLDER_LINK
 
+        assunto_t = EMAIL_DIA2_ASSUNTO if self._requer_link else EMAIL_DIA2_ASSUNTO_LEMBRETE
+        texto_t = EMAIL_DIA2_TEXTO if self._requer_link else EMAIL_DIA2_TEXTO_LEMBRETE
+        html_t = EMAIL_DIA2_HTML if self._requer_link else EMAIL_DIA2_HTML_LEMBRETE
         ctx = self._ctx(cliente, link_efetivo)
-        assunto = render(EMAIL_DIA2_ASSUNTO, ctx)
-        texto = render(EMAIL_DIA2_TEXTO, ctx)
-        html = render(EMAIL_DIA2_HTML, ctx, escape_html=True)
+        assunto = render(assunto_t, ctx)
+        texto = render(texto_t, ctx)
+        html = render(html_t, ctx, escape_html=True)
         decision = evaluate_email(
             cliente, opted_out=opted_out, email_valido=email_valido,
             tem_link=tem_link, window_open=window_open,
+            requer_link=self._requer_link,
         )
 
         if not decision.should_send:

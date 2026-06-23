@@ -421,24 +421,57 @@ ruff check seguros tests
 
 ---
 
-## Multi-seguradora (Prudential em andamento)
+## Multi-seguradora (MAG + Prudential)
 
-A arquitetura já prevê várias seguradoras: a fronteira é a ABC
-`SeguradoraConnector` (`seguros/connectors/base.py`), com `MagConnector` como a
-implementação atual. Uma nova seguradora pluga aqui.
+A fronteira é a ABC `SeguradoraConnector` (`seguros/connectors/base.py`); o
+`seguros/connectors/factory.py` resolve `config.insurer` → conector. O **dashboard
+hospeda as duas seguradoras**: a pessoa escolhe MAG ou Prudential na tela de login
+(um `DashboardService` por seguradora). A MAG mantém o escopo `corretor_id`; a
+Prudential fica isolada em `corretor_id:prudential` no mesmo banco (sem migração de
+schema). No CLI, use `--insurer prudential`.
 
-**Estado da Prudential (exploração, pausada):**
-- Portal **Life Planner** (AEM) em `lifeplanner.prudential.com.br` (SSO OIDC via
-  `pob-sso.prudential.com.br`); os sistemas reais são **ASP.NET** em
-  `saa.prudential.com.br/DBClient/*.aspx`.
-- Inadimplência = **"Relatório de Atraso"** (`PAG_DBClient_ApoliceAtraso.aspx`):
-  formulário de filtro (**Dias Atraso**, Segurado, Forma Pagto....) com botões
-  **Filtrar · Imprimir · Excel** (o Excel pode ser a fonte de dados ideal).
-- Ferramenta genérica de login/inspeção criada: `python tools/insurer_login.py <URL_LOGIN> prudential`.
-- **Perguntas em aberto antes de implementar:** como o cliente paga um prêmio em
-  atraso (tem 2ª via/link, ou é débito automático e a cobrança é só lembrete?); o
-  que o "Filtrar" retorna / o Excel baixa; onde vem o contato (relatório ou Carteira
-  de Clientes).
+### Prudential — CALIBRADO e VERIFICADO (extrai 32 apólices reais)
+
+Conector completo em `seguros/connectors/prudential/`, calibrado ao vivo (login OTP,
+2026-06-23) e verificado offline contra o DOM real capturado — extrai **32 apólices
+em atraso** com nome, telefone (formato Z-API) e valor.
+
+**Como o portal é (descoberto ao vivo):**
+- Portal **Life Planner** (AEM) com SSO (`pob-sso.prudential.com.br`); o relatório é
+  **ASP.NET** top-level (sem iframe): `saa.prudential.com.br/DBClient/PAG_DBClient_ApoliceAtraso.aspx`.
+  Navegamos direto no ASPX (cookies `.prudential.com.br` cobrem `saa`). Sessão
+  **headed** (o Incapsula barra headless).
+- **Chave = APÓLICE** (a Prudential não expõe CPF nesse relatório). O **telefone e o
+  valor (Prêmio) vêm na própria grade** (colunas `Contatos`/`Prêmio`). As colunas são
+  resolvidas por texto do cabeçalho (`atraso.col`); a grade (sem id estável) é achada
+  pelo marcador "Apólice" (`scraping.find_results_table`) — robusta a mudança de id.
+  Os IDs do **formulário** (`Dias Atraso`/`Filtrar`/`Excel`) estão calibrados no
+  `selectors.yaml`.
+
+**⚠️ Tokens curtos — login e operação na MESMA sessão.** Os tokens da Prudential
+expiram em **minutos**, então NÃO dá pra logar num passo e operar noutro (o cookie
+morre no meio). O login é feito na MESMA janela que opera:
+- **CLI:** `python -m seguros --insurer prudential` → abre o Chrome, **você loga na
+  própria janela** (usuário, senha, OTP), aperta ENTER no terminal, e ele descobre na
+  sessão viva. Dry-run por padrão; `--live` envia de verdade.
+- **Painel:** clique **Descobrir** na Prudential → abre o Chrome → **logue na janela**
+  → o painel detecta por *polling* (~2,5 min) e segue sozinho ao cair no relatório
+  (não pede OTP em texto porque é servidor web).
+
+**Modo LEMBRETE:** a Prudential não tem link de pagamento conhecido → a régua opera
+sem link: templates de lembrete (sem `${link_pagamento}`) e o gate não exige link
+(`requer_link=False`, capability `insurer_has_payment_link` em `factory.py`). Se um
+dia houver 2ª via/link, basta virar a capability.
+
+**Health-check (🩺):** confere se a Prudential mudou o **formulário** (`Dias Atraso`/
+`Filtrar`/`Excel`) — a grade se auto-calibra, mas o form não. N/A se a sessão estiver
+fora do ar (não dá alarme falso).
+
+**Pendências conhecidas:**
+- O painel ainda mostra **"Gerar link"** no fluxo por cliente da Prudential; o certo
+  seria **"Disparar"** direto (é lembrete, não tem link). Operar pelo CLI por enquanto.
+- `vencimento` usa a 1ª data de "Pago até / Vencido Em"; paginação do GridView se o
+  relatório tiver >1 página (hoje lê a página única).
 
 ---
 
@@ -451,11 +484,14 @@ seguros/
   domain/     → models.py (entidades/enums), state.py (gates puros)
   messaging/  → phone.py, templates.py, intents.py (classificador), whatsapp.py (Z-API), email.py (SMTP)
   connectors/
-    base.py   → SeguradoraConnector (ABC) + DTOs  ← fronteira de abstração (multi-seguradora)
-    fake.py   → FakeConnector (offline)
-    mag/      → connector.py, session.py, scraping.py, links.py, selectors.py/.yaml, inspect_mode.py, login_browser.py
-  dashboard/  → app.py (FastAPI), service.py (lógica), worker.py (thread do Playwright),
-                webhook.py (inbound Z-API), static/ (index.html, login.html)
+    base.py     → SeguradoraConnector (ABC) + DTOs  ← fronteira de abstração (multi-seguradora)
+    factory.py  → build_connector(config.insurer) + capability insurer_has_payment_link
+    fake.py     → FakeConnector (offline)
+    mag/        → connector.py, session.py, scraping.py, links.py, selectors.py/.yaml, inspect_mode.py, login_browser.py
+    prudential/ → connector.py, session.py (login na mesma sessão / poll p/ painel),
+                  scraping.py (grade por Apólice), selectors.py/.yaml, inspect_mode.py, login_browser.py
+  dashboard/  → app.py (FastAPI, escolhe seguradora no login), service.py (lógica),
+                worker.py (thread do Playwright), webhook.py (inbound Z-API), static/
 tools/        → insurer_login.py (login/inspeção genérico p/ nova seguradora)
 tests/        → pytest (repos, intents, inbound, estado, telefone, templates, ...)
 ```

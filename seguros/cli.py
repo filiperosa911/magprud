@@ -17,7 +17,7 @@ import os
 import sys
 from pathlib import Path
 
-from .config import ConfigError, load_config
+from .config import ConfigError, config_for_insurer, load_config
 from .cpf import normalize_cpf
 from .db.connection import init_db
 from .db.repository import LogRepository, OptOutRepository, ReguaRepository
@@ -47,6 +47,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--log-level", default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"])
     p.add_argument("--dashboard", action="store_true", help="abre o painel web local")
     p.add_argument("--port", type=int, default=8765, help="porta do dashboard")
+    p.add_argument("--insurer", choices=["mag", "prudential"], default=None,
+                   help="seguradora alvo (default: INSURER do .env ou 'mag')")
     return p.parse_args(argv)
 
 
@@ -159,6 +161,11 @@ def main(argv: list[str] | None = None) -> int:
         print(err, file=sys.stderr)
         return 2
 
+    # Seguradora alvo: --insurer sobrepõe o INSURER do .env e ajusta escopo de
+    # dados (corretor_id:insurer) e pasta de sessão (.{insurer}_session).
+    if args.insurer:
+        config = config_for_insurer(config, args.insurer)
+
     setup_logging(Path("logs"), args.log_level)
     if config.live:
         log.warning("================ MODO LIVE ================")
@@ -191,7 +198,7 @@ def main(argv: list[str] | None = None) -> int:
 
     calibration_mode = args.inspect or args.validate_selectors
     if args.fake and (calibration_mode or args.login):
-        print("--inspect/--validate-selectors/--login exigem a MAG real (não use --fake).",
+        print("--inspect/--validate-selectors/--login exigem a seguradora real (não use --fake).",
               file=sys.stderr)
         conn.close()
         return 2
@@ -214,18 +221,18 @@ def main(argv: list[str] | None = None) -> int:
 
             connector = FakeConnector()
         else:
-            from .connectors.mag.connector import MagConnector
+            from .connectors.factory import build_connector
 
-            connector = MagConnector(config, notifier=notifier)
+            connector = build_connector(config, notifier=notifier)
 
         with connector:
             if args.inspect:
-                from .connectors.mag.inspect_mode import run_inspect
+                run_inspect = _inspect_module(config).run_inspect
 
                 run_inspect(connector, Path("artifacts"))
                 return 0
             if args.validate_selectors:
-                from .connectors.mag.inspect_mode import validate_selectors
+                validate_selectors = _inspect_module(config).validate_selectors
 
                 rc = _print_validation(validate_selectors(connector))
                 return rc
@@ -260,6 +267,15 @@ def main(argv: list[str] | None = None) -> int:
     return rc
 
 
+def _inspect_module(config):
+    """Módulo de inspeção/validação da seguradora ativa (mag | prudential)."""
+    if config.insurer == "prudential":
+        from .connectors.prudential import inspect_mode
+    else:
+        from .connectors.mag import inspect_mode
+    return inspect_mode
+
+
 def _run_dashboard(config, port: int) -> int:
     """Sobe o dashboard web local (FastAPI/uvicorn) e abre o navegador."""
     import threading
@@ -273,7 +289,8 @@ def _run_dashboard(config, port: int) -> int:
     app = create_app(config)
     url = f"http://127.0.0.1:{port}"
     print("\n  ╭───────────────────────────────────────────────╮")
-    print(f"  │  Régua MAG — painel em {url:<23}│")
+    print(f"  │  Régua — painel em {url:<27}│")
+    print("  │  escolha a seguradora (MAG/Prudential) no login│")
     print("  │  (Ctrl+C para encerrar)                       │")
     print("  ╰───────────────────────────────────────────────╯\n")
     # Segurança (must-fix #5): o painel tem auth fraca. Se for receber webhooks
@@ -328,8 +345,12 @@ def _test_whatsapp(config, numero: str) -> int:
 
 def _do_login(config, notifier) -> int:
     """Login humano via Chrome normal, captura de cookies e verificação."""
-    from .connectors.mag.login_browser import login_and_capture
+    if config.insurer == "prudential":
+        from .connectors.prudential.login_browser import login_and_capture
+    else:
+        from .connectors.mag.login_browser import login_and_capture
 
+    rotulo = config.insurer.upper()
     if not login_and_capture(config):
         print(
             "\n⚠️  Não detectei uma sessão válida. Rode `--login` de novo, conclua o "
@@ -338,13 +359,22 @@ def _do_login(config, notifier) -> int:
         return 3
 
     # Confirma reabrindo com o Playwright + cookies reinjetados.
-    from .connectors.mag.connector import MagConnector
+    from .connectors.factory import build_connector
 
-    connector = MagConnector(config, notifier=notifier)
+    connector = build_connector(config, notifier=notifier)
     try:
         with connector:
             if connector.session.is_authenticated():
-                print("\n✅ Sessão MAG autenticada e salva. Pode rodar a régua.")
+                print(f"\n✅ Sessão {rotulo} autenticada e salva. Pode rodar a régua.")
+                # Prudential: aproveita a sessão FRESCA (tokens são curtos) para já
+                # dumpar o DOM do Relatório de Atraso e calibrar os selectors.
+                if config.insurer == "prudential":
+                    from .connectors.prudential.inspect_mode import capture_form_dom
+
+                    try:
+                        capture_form_dom(connector, Path("artifacts"))
+                    except Exception as err:  # noqa: BLE001 - captura é best-effort
+                        log.warning("auto-captura de calibração falhou: %s", err)
                 return 0
             print(
                 "\n⚠️  A sessão foi capturada mas não validou na reabertura. "

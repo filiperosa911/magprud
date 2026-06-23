@@ -1,9 +1,10 @@
-"""Worker de thread única que detém a sessão Playwright (MagConnector).
+"""Worker de thread única que detém a sessão Playwright do conector da seguradora.
 
 O Playwright (API sync) não pode ser usado entre threads, e o FastAPI roda
-endpoints ``def`` num threadpool. Por isso TODA ação na MAG é serializada por
-este worker: uma thread dedicada cria o conector (lazy), mantém o Chrome aberto
-e processa uma fila de ações. As requisições web enfileiram e aguardam o futuro.
+endpoints ``def`` num threadpool. Por isso TODA ação no portal é serializada por
+este worker: uma thread dedicada cria o conector (lazy, via factory de seguradora),
+mantém o Chrome aberto e processa uma fila de ações. As requisições web enfileiram
+e aguardam o futuro.
 """
 
 from __future__ import annotations
@@ -25,7 +26,10 @@ class ConnectorWorker:
         self._connector = None
         self._started = False
         self._lock = threading.Lock()
-        self._thread = threading.Thread(target=self._run, name="mag-worker", daemon=True)
+        insurer = getattr(config, "insurer", "mag")
+        self._thread = threading.Thread(
+            target=self._run, name=f"{insurer}-worker", daemon=True
+        )
         self._thread.start()
 
     # --- API pública ---------------------------------------------------------
@@ -60,10 +64,11 @@ class ConnectorWorker:
 
     def _ensure_connector(self, ensure_auth: bool):
         if self._connector is None:
-            from ..connectors.mag.connector import MagConnector
+            from ..connectors.factory import build_connector
 
-            log.info("iniciando MagConnector no worker")
-            conn = MagConnector(self.config, notifier=self.notifier)
+            insurer = getattr(self.config, "insurer", "mag")
+            log.info("iniciando conector (%s) no worker", insurer)
+            conn = build_connector(self.config, notifier=self.notifier)
             conn.start()
             self._connector = conn
         if ensure_auth:

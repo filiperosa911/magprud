@@ -50,7 +50,9 @@ from ..messaging.templates import (
     RESP_RESCHEDULE_SEM_DATA,
     RESP_SAIR,
     WHATSAPP_DIA0,
+    WHATSAPP_DIA0_LEMBRETE,
     WHATSAPP_FOLLOWUP,
+    WHATSAPP_FOLLOWUP_LEMBRETE,
     brl_from_cents,
     primeiro_nome,
     render,
@@ -113,6 +115,10 @@ class DashboardService:
         self.corretor_id = config.corretor_id
         init_db(config.db_path)
         self.worker = ConnectorWorker(config)
+        # Seguradora sem link (Prudential): régua = LEMBRETE (não exige link no
+        # gate de disparo; usa templates sem link). MAG mantém o fluxo com link.
+        from ..connectors.factory import insurer_has_payment_link
+        self._requer_link = insurer_has_payment_link(config.insurer)
         self.test_number = config.whatsapp_override_to  # número de teste (mutável)
         self._zapi = None
         # revisão matinal do DOM (health-check) — 1x/dia, só com a sessão de pé
@@ -130,13 +136,15 @@ class DashboardService:
         return get_conn(self.config.db_path)
 
     def _mag(self, fn, **kw):
-        """Ação na MAG (via worker), traduzindo sessão expirada em msg amigável."""
+        """Ação no portal (via worker), traduzindo sessão expirada em msg amigável.
+
+        Propaga a mensagem do próprio conector (já é específica da seguradora —
+        MAG fala em `--login`, Prudential em `--insurer prudential --login`)."""
         try:
             return self.worker.submit(fn, **kw)
         except (NotAuthenticatedError, SessionExpiredError) as err:
             raise DashboardError(
-                "Sessão MAG expirada. Rode `python -m seguros --login` no terminal "
-                "e tente de novo."
+                str(err) or "Sessão expirada. Rode o --login e tente de novo."
             ) from err
 
     def _zapi_sender(self):
@@ -371,7 +379,7 @@ class DashboardService:
             cliente = repo.get(cpf)
         finally:
             conn.close()
-        if not (link_result and link_result.link):
+        if self._requer_link and not (link_result and link_result.link):
             raise DashboardError("Cobrança feita, mas não consegui capturar o link.")
         return {"ok": True, "cliente": self._cliente_dict(cliente)}
 
@@ -389,7 +397,7 @@ class DashboardService:
                 raise DashboardError("Cliente não encontrado.")
             if optout.is_opted_out(cpf=cpf, telefone=_canon(cliente.telefone)):
                 raise DashboardError("Cliente está em opt-out.")
-            if not cliente.link_pagamento:
+            if self._requer_link and not cliente.link_pagamento:
                 raise DashboardError("Sem link. Gere o link (HOLD) antes de disparar.")
             if cliente.whatsapp_enviado_em and not forcar:
                 raise DashboardError("Já disparado. Use 'forçar' para reenviar.")
@@ -407,11 +415,12 @@ class DashboardService:
                 "primeiro_nome": primeiro_nome(cliente.nome),
                 "competencia": cliente.competencia or "—",
                 "valor_total": brl_from_cents(cliente.valor_inadimplente_cents),
-                "link_pagamento": cliente.link_pagamento,
+                "link_pagamento": cliente.link_pagamento or "",
                 "nome_corretor": self.config.nome_corretor,
                 "corretora": self.config.nome_corretora,
             }
-            mensagem = render(WHATSAPP_DIA0, ctx)
+            template = WHATSAPP_DIA0 if self._requer_link else WHATSAPP_DIA0_LEMBRETE
+            mensagem = render(template, ctx)
             result = self._zapi_sender().send(destino, mensagem)
             nota = (f"[TESTE→{self.test_number}] cliente real: {cliente.telefone}"
                     if self.test_number else "")
@@ -451,7 +460,7 @@ class DashboardService:
                 raise DashboardError("Cliente já está resolvido (pagou).")
             if cliente.follow_up_enviado_em and not forcar:
                 raise DashboardError("Follow-up já enviado. Use 'forçar' para reenviar.")
-            if not cliente.link_pagamento:
+            if self._requer_link and not cliente.link_pagamento:
                 raise DashboardError("Sem link de pagamento para reaproveitar.")
         finally:
             conn.close()
@@ -485,11 +494,12 @@ class DashboardService:
                 "primeiro_nome": primeiro_nome(cliente.nome),
                 "competencia": cliente.competencia or "—",
                 "valor_total": brl_from_cents(cliente.valor_inadimplente_cents),
-                "link_pagamento": cliente.link_pagamento,
+                "link_pagamento": cliente.link_pagamento or "",
                 "nome_corretor": self.config.nome_corretor,
                 "corretora": self.config.nome_corretora,
             }
-            mensagem = render(WHATSAPP_FOLLOWUP, ctx)
+            template = WHATSAPP_FOLLOWUP if self._requer_link else WHATSAPP_FOLLOWUP_LEMBRETE
+            mensagem = render(template, ctx)
             result = self._zapi_sender().send(destino, mensagem)
             nota = (f"[FOLLOWUP][TESTE→{self.test_number}] cliente real: {cliente.telefone}"
                     if self.test_number else "[FOLLOWUP]")
@@ -832,8 +842,14 @@ class DashboardService:
     _CRITICOS_LISTA = ("inadimplencias.row", "inadimplencias.empty_state")
 
     def health_selectors(self) -> dict:
-        """Smoke test (read-only): seletores CRÍTICOS da lista. O par linha/estado-
-        vazio conta como UMA checagem (basta um resolver — a lista renderizou)."""
+        """Smoke test (read-only) do DOM: confere se os seletores CRÍTICOS ainda
+        resolvem — alarme antecipado p/ quando a seguradora muda o layout e quebra
+        a automação (ele DETECTA e avisa; a recalibração é manual).
+
+        MAG: seletores fixos do Lightning (lista/contato). Prudential: campos do
+        formulário do Relatório de Atraso (a grade se auto-calibra, mas o form não)."""
+        if self.config.insurer == "prudential":
+            return self._health_prudential()
         from ..connectors.mag.inspect_mode import validate_selectors
 
         results = self._mag(lambda c: validate_selectors(c))
@@ -851,6 +867,38 @@ class DashboardService:
             "falhas": falhas,
             "contextuais": len(results) - len(self._CRITICOS) - len(self._CRITICOS_LISTA),
         }
+
+    def _health_prudential(self) -> dict:
+        """Health-check da Prudential: confere os campos CRÍTICOS do formulário do
+        Relatório de Atraso. A grade se auto-calibra (acha a tabela pela Apólice),
+        mas o form NÃO — se a Prudential renomear os controles ASP.NET, a régua para.
+        Read-only; não força login (se a sessão estiver fora do ar, devolve N/A)."""
+        criticos = ["atraso.form.dias_atraso_de", "atraso.form.filtrar_button",
+                    "atraso.form.excel_button"]
+
+        def _check(c):
+            if not c.session.is_authenticated():
+                return None
+            out = {}
+            for k in criticos:
+                try:
+                    out[k] = c.selectors.locator(c.page, k).count() > 0
+                except Exception:  # noqa: BLE001
+                    out[k] = False
+            return out
+
+        try:
+            res = self.worker.submit(_check, ensure_auth=False)
+        except Exception as err:  # noqa: BLE001
+            return {"ok": 0, "total": len(criticos), "falhas": [], "contextuais": 0,
+                    "na": True, "detalhe": f"não consegui checar: {err}"}
+        if res is None:
+            return {"ok": 0, "total": len(criticos), "falhas": [], "contextuais": 0,
+                    "na": True, "detalhe": "sessão Prudential fora do ar — faça Descobrir/login antes"}
+        falhas = [{"chave": k, "detalhe": "não resolveu (a Prudential mudou o formulário?)"}
+                  for k, ok in res.items() if not ok]
+        return {"ok": len(res) - len(falhas), "total": len(res), "falhas": falhas,
+                "contextuais": 0}
 
     # --- revisão matinal automática do DOM ----------------------------------
 

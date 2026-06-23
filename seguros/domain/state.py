@@ -25,11 +25,16 @@ def evaluate(
     destino_valido: bool,
     ja_enviado: bool,
     window_open: bool,
+    requer_link: bool = True,
 ) -> Decision:
-    """Avalia os gates a partir de booleanos já computados pelo orquestrador."""
+    """Avalia os gates a partir de booleanos já computados pelo orquestrador.
+
+    ``requer_link``: seguradoras sem link de pagamento (ex.: Prudential — só
+    lembrete) passam ``False`` para não pular por ``SEM_LINK``.
+    """
     if opted_out:
         return Decision.skip(Resultado.PULADO_OPTOUT)
-    if not tem_link:
+    if requer_link and not tem_link:
         return Decision.skip(Resultado.SEM_LINK)
     if not destino_valido:
         invalido = (
@@ -50,6 +55,7 @@ def evaluate_whatsapp(
     telefone_valido: bool,
     tem_link: bool,
     window_open: bool,
+    requer_link: bool = True,
 ) -> Decision:
     return evaluate(
         Canal.WHATSAPP,
@@ -58,6 +64,7 @@ def evaluate_whatsapp(
         destino_valido=telefone_valido,
         ja_enviado=cliente.whatsapp_enviado_em is not None,
         window_open=window_open,
+        requer_link=requer_link,
     )
 
 
@@ -68,6 +75,7 @@ def evaluate_email(
     email_valido: bool,
     tem_link: bool,
     window_open: bool,
+    requer_link: bool = True,
 ) -> Decision:
     return evaluate(
         Canal.EMAIL,
@@ -76,6 +84,7 @@ def evaluate_email(
         destino_valido=email_valido,
         ja_enviado=cliente.email_enviado_em is not None,
         window_open=window_open,
+        requer_link=requer_link,
     )
 
 

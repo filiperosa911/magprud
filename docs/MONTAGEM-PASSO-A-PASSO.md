@@ -260,6 +260,25 @@ ruff check .
 
 ---
 
+### Fase 13 — Multi-seguradora (MAG + Prudential)
+
+**O que se constrói:** generalizar a régua para mais de uma seguradora, mantendo a MAG intacta. (Ver detalhes no [README](../README.md#multi-seguradora-mag--prudential).)
+
+**Arquivos criados/afetados:**
+- `seguros/connectors/factory.py` — `build_connector(config.insurer)` (mag|prudential) + capability `insurer_has_payment_link`.
+- `seguros/connectors/prudential/` — conector completo (session com login na MESMA sessão / poll p/ painel, scraping de grade por **Apólice**, selectors.yaml calibrado, inspect_mode).
+- `seguros/config.py` — campo `insurer` + `config_for_insurer()` (escopo `corretor_id:insurer`, pasta `.{insurer}_session`).
+- `seguros/dashboard/app.py` — um `DashboardService` por seguradora; a pessoa escolhe no login (`/api/me`).
+- `seguros/domain/state.py` + `messaging/templates.py` + `orchestrator.py` + `dashboard/service.py` — **modo LEMBRETE** (seguradora sem link): `requer_link` no gate + templates `*_LEMBRETE`.
+- `tests/test_insurer_split.py` — factory, escopo, modo lembrete, scraping da Prudential.
+
+**Decisões-chave:**
+- **MAG intacta:** `config.insurer='mag'` mantém todo o comportamento original; a Prudential é aditiva.
+- **Prudential é diferente da MAG:** chave = **Apólice** (não CPF); telefone/valor vêm na própria grade; **tokens curtos** → login e operação na MESMA janela (CLI pausa p/ ENTER; painel detecta login por *polling*).
+- **Modo lembrete:** a Prudential não tem link de pagamento → a régua manda lembrete (sem link, gate não exige link). É só virar a capability se houver 2ª via/link.
+
+---
+
 ## 4. Como rodar
 
 **Dry-run (padrão e seguro)** — descobre, casa contatos, gera link em preview e renderiza as mensagens; **NÃO** envia nem altera a MAG; **NÃO** persiste enrollment:

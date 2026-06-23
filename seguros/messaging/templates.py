@@ -32,6 +32,58 @@ Se já tiver pago, pode desconsiderar! E se quiser que eu gere um novo link, é 
 Abraço, ${nome_corretor} — ${corretora}"""
 )
 
+# --- Variantes LEMBRETE (seguradora sem link de pagamento, ex.: Prudential) ---
+# Sem ${link_pagamento} e sem citar a seguradora: a régua só lembra e abre a
+# porta para a corretora orientar o pagamento pelo canal próprio.
+
+WHATSAPP_DIA0_LEMBRETE = Template(
+    """Olá, ${primeiro_nome}, tudo bem?
+Aqui é ${nome_corretor}, da ${corretora} — sua corretora parceira.
+Identifiquei uma pendência no seu seguro referente a ${competencia}, no valor de ${valor_total}.
+Para regularizar com tranquilidade, me responda por aqui que eu te oriento sobre o pagamento.
+Se já tiver pago, pode desconsiderar. Qualquer dúvida, estou à disposição.
+Caso não queira mais receber estes lembretes por WhatsApp, responda SAIR."""
+)
+
+WHATSAPP_FOLLOWUP_LEMBRETE = Template(
+    """Olá, ${primeiro_nome}, tudo bem? 😊
+Passando só pra relembrar que a pendência do seu seguro referente a ${competencia} (${valor_total}) ainda consta em aberto por aqui.
+Se já tiver pago, pode desconsiderar! E se quiser, me chama que eu te ajudo a regularizar.
+Abraço, ${nome_corretor} — ${corretora}"""
+)
+
+EMAIL_DIA2_ASSUNTO_LEMBRETE = Template("Pendência no seu seguro — ${competencia}")
+
+EMAIL_DIA2_TEXTO_LEMBRETE = Template(
+    """Olá, ${primeiro_nome},
+
+Identifiquei uma pendência no seu seguro referente a ${competencia}, no valor de ${valor_total}, ainda em aberto.
+
+Para regularizar com tranquilidade, é só responder este e-mail ou me chamar que eu te oriento sobre o pagamento.
+
+Se o pagamento já tiver sido feito, por favor desconsidere este e-mail.
+Fico à disposição para qualquer dúvida.
+
+Atenciosamente,
+${nome_corretor} — ${corretora}"""
+)
+
+EMAIL_DIA2_HTML_LEMBRETE = Template(
+    """<!DOCTYPE html>
+<html lang="pt-BR">
+<body style="font-family: Arial, Helvetica, sans-serif; font-size: 15px; color: #222; line-height: 1.5;">
+  <p>Olá, ${primeiro_nome},</p>
+  <p>Identifiquei uma pendência no seu seguro referente a <strong>${competencia}</strong>,
+     no valor de <strong>${valor_total}</strong>, ainda em aberto.</p>
+  <p>Para regularizar com tranquilidade, é só responder este e-mail ou me chamar
+     que eu te oriento sobre o pagamento.</p>
+  <p>Se o pagamento já tiver sido feito, por favor desconsidere este e-mail.<br>
+     Fico à disposição para qualquer dúvida.</p>
+  <p>Atenciosamente,<br>${nome_corretor} — ${corretora}</p>
+</body>
+</html>"""
+)
+
 # --- Agente inbound: respostas automáticas ao cliente ------------------------
 
 RESP_SAIR = Template(
@@ -154,6 +206,11 @@ def render(template: Template, ctx: dict, *, escape_html: bool = False) -> str:
 __all__ = [
     "WHATSAPP_DIA0",
     "WHATSAPP_FOLLOWUP",
+    "WHATSAPP_DIA0_LEMBRETE",
+    "WHATSAPP_FOLLOWUP_LEMBRETE",
+    "EMAIL_DIA2_ASSUNTO_LEMBRETE",
+    "EMAIL_DIA2_TEXTO_LEMBRETE",
+    "EMAIL_DIA2_HTML_LEMBRETE",
     "RESP_SAIR",
     "RESP_JA_PAGUEI_CONFIRMADO",
     "RESP_JA_PAGUEI_PENDENTE",

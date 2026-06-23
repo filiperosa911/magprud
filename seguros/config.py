@@ -7,7 +7,7 @@ de estourar na primeira. Em modo ``--live`` exige as credenciais de envio.
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import time
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -105,6 +105,21 @@ class Config:
 
     # limitação conhecida
     payment_link_ttl_days: int | None
+
+    # seguradora ativa ('mag' | 'prudential'); o dashboard pode hospedar mais de
+    # uma e seleciona na entrada. Default 'mag' (compatível com o comportamento atual).
+    insurer: str = "mag"
+
+    # Prudential (Life Planner AEM + relatório ASPX em saa.prudential.com.br).
+    # Defaults conhecidos da exploração; o .env pode sobrescrever. O DOM do
+    # formulário/grade está num iframe cross-origin e é calibrado AO VIVO.
+    prudential_login_url: str = "https://lifeplanner.prudential.com.br/"
+    prudential_home_url: str = "https://lifeplanner.prudential.com.br/"
+    prudential_atraso_url: str = (
+        "https://saa.prudential.com.br/DBClient/PAG_DBClient_ApoliceAtraso.aspx"
+        "?AEMHost=https://lponline.prudential.com.br"
+    )
+    prudential_dias_atraso_min: int = 1
 
 
 def load_config(*, live: bool, env_path: str | None = None) -> Config:
@@ -234,7 +249,42 @@ def load_config(*, live: bool, env_path: str | None = None) -> Config:
         max_sends_per_run=_as_int(os.environ.get("MAX_SENDS_PER_RUN"), 200),
         max_falhas_consecutivas=_as_int(os.environ.get("MAX_FALHAS_CONSECUTIVAS"), 5),
         payment_link_ttl_days=payment_link_ttl_days,
+        insurer=(os.environ.get("INSURER", "mag").strip().lower() or "mag"),
+        prudential_login_url=(
+            os.environ.get("PRUDENTIAL_LOGIN_URL", "").strip()
+            or "https://lifeplanner.prudential.com.br/"
+        ),
+        prudential_home_url=(
+            os.environ.get("PRUDENTIAL_HOME_URL", "").strip()
+            or "https://lifeplanner.prudential.com.br/"
+        ),
+        prudential_atraso_url=(
+            os.environ.get("PRUDENTIAL_ATRASO_URL", "").strip()
+            or "https://saa.prudential.com.br/DBClient/PAG_DBClient_ApoliceAtraso.aspx"
+            "?AEMHost=https://lponline.prudential.com.br"
+        ),
+        prudential_dias_atraso_min=_as_int(os.environ.get("PRUDENTIAL_DIAS_ATRASO_MIN"), 1),
     )
 
 
-__all__ = ["Config", "ConfigError", "load_config"]
+def config_for_insurer(base: Config, insurer: str) -> Config:
+    """Deriva a config de uma seguradora a partir da ``base``.
+
+    A MAG mantém o escopo/sessão atuais (compatibilidade). As demais ficam
+    isoladas em ``corretor_id:insurer`` (mesmo banco, sem migração) e na pasta de
+    sessão ``.{insurer}_session``. Usado pelo dashboard (multi-seguradora) e pelo
+    CLI (``--insurer``) para que os dois escopem do mesmo jeito.
+    """
+    insurer = (insurer or "mag").lower()
+    if insurer == "mag":
+        return replace(base, insurer="mag")
+    return replace(
+        base,
+        insurer=insurer,
+        corretor_id=f"{base.corretor_id}:{insurer}",
+        user_data_dir=Path(f"./.{insurer}_session"),
+        healthcheck_auto=False,
+    )
+
+
+__all__ = ["Config", "ConfigError", "load_config", "config_for_insurer"]

@@ -80,7 +80,7 @@
       <div class="brand">
         <div class="orb">R</div>
         <div>
-          <h1>Régua <span>MAG</span></h1>
+          <h1>Régua <span id="brandInsurer">MAG</span></h1>
           <div class="muted" style="font-size:11px;letter-spacing:1px;">PAINEL DO GESTOR · JORNADA DE COBRANÇA</div>
         </div>
       </div>
@@ -90,7 +90,7 @@
           <input id="testNumber" style="width:150px" placeholder="vazio = cliente real" />
           <button class="btn btn-ghost" onclick="saveTestNumber()">salvar</button>
         </div>
-        <button class="btn btn-ghost" id="btnHealth" onclick="healthSelectors()" title="Confere se os seletores da MAG ainda funcionam">🩺</button>
+        <button class="btn btn-ghost" id="btnHealth" onclick="healthSelectors()" title="Health-check do DOM: confere se os seletores da seguradora ainda funcionam">🩺</button>
         <button class="btn btn-grad" id="btnDiscover" onclick="discover()">↻ Descobrir</button>
         <button class="btn btn-ghost" id="btnRec" onclick="reconciliar()" title="Detecta quem já pagou (saiu da inadimplência)">✓ Reconciliar</button>
         <button class="btn btn-ghost" onclick="logout()">sair</button>
@@ -295,7 +295,8 @@ async function saveTestNumber(){ await withBtn(null,'',async()=>{
 async function logout(){ try{ await api('/api/logout',{method:'POST'}); }catch(_){} location.href='/login'; }
 async function healthSelectors(){ await withBtn($('#btnHealth'),'',async()=>{
   const r=await api('/api/health/selectors');
-  if(r.ok===r.total) banner(`Seletores OK (${r.ok}/${r.total}).`,'ok');
+  if(r.na) banner(`🩺 Health-check: ${r.detalhe||'N/A'}.`,'ok');
+  else if(r.ok===r.total) banner(`Seletores OK (${r.ok}/${r.total}).`,'ok');
   else banner(`⚠️ ${r.total-r.ok} seletor(es) FALHANDO: ${r.falhas.map(f=>f.chave).join(', ')} — calibre antes de operar.`,'err');
 }); }
 
@@ -349,6 +350,17 @@ async function loadLog(){
     <td class="mono">${r.cpf}</td><td>${r.canal}</td><td>${r.resultado}</td><td>${r.modo}</td>
     <td class="muted" style="font-size:11px;max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.payload_resumo||''}</td></tr>`).join('');
 }
+async function initBrand(){
+  try{
+    const me=await api('/api/me');
+    const span=document.getElementById('brandInsurer');
+    if(span) span.textContent=me.label||(me.insurer||'').toUpperCase();
+    document.title=`Régua ${me.label||''} — Painel`.trim();
+    if(me.insurer && me.insurer!=='mag')
+      banner(`Seguradora: ${me.label}. Conector em calibração — ações no portal ficam bloqueadas até o mapeamento do DOM.`,'err');
+  }catch(_){}
+}
+initBrand();
 refresh().catch(e=>banner(e.message,'err'));
 setInterval(()=>refresh().catch(()=>{}),15000);
 </script>
