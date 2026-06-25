@@ -214,6 +214,17 @@ class ReguaRepository:
         )
         self.conn.commit()
 
+    def update_telefone_if_missing(self, cpf: str, telefone: str | None) -> None:
+        """Preenche o telefone apenas se ainda não estava salvo (não sobrescreve)."""
+        if not telefone:
+            return
+        self.conn.execute(
+            "UPDATE clientes_regua SET telefone = ?, atualizado_em = ? "
+            "WHERE corretor_id = ? AND cpf = ? AND (telefone IS NULL OR telefone = '')",
+            (telefone, iso_utc(), self.corretor_id, cpf),
+        )
+        self.conn.commit()
+
     def update_contact(self, cpf: str, *, telefone, email, autoriza_whatsapp,
                        autoriza_email) -> None:
         self.conn.execute(

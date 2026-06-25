@@ -14,22 +14,21 @@ from string import Template
 # --- textos (exatamente os da especificação §10, em estilo ${var}) -----------
 
 WHATSAPP_DIA0 = Template(
-    """Olá, ${primeiro_nome}, tudo bem?
-Aqui é ${nome_corretor}, da ${corretora} — sua corretora parceira MAG Seguros.
-Identifiquei uma pendência no seu seguro referente a ${competencia}, no valor de ${valor_total}.
-Para regularizar de forma rápida e segura, é só acessar o link de pagamento abaixo:
+    """Olá, ${primeiro_nome}! Aqui é a IA do ${nome_corretor}, seu corretor de seguros.
+Percebi que você tem um prêmio em aberto referente a ${competencia}, no valor de ${valor_total} — pode ser algum erro na cobrança ou algo que passou despercebido.
+Para resolver de forma rápida e segura, é só acessar o link abaixo:
 ${link_pagamento}
-Se já tiver pago, pode desconsiderar. Qualquer dúvida, estou à disposição por aqui.
-Caso não queira mais receber estes lembretes por WhatsApp, responda SAIR."""
+Se já tiver pago, pode desconsiderar. Qualquer dúvida, estou aqui para ajudar.
+Caso não queira mais receber estes avisos, responda SAIR."""
 )
 
 # Follow-up (dia 2): 2º toque, sutil/leve, abre a porta pra conversa.
 WHATSAPP_FOLLOWUP = Template(
-    """Olá, ${primeiro_nome}, tudo bem? 😊
-Não sei se você chegou a ver minha mensagem do outro dia. Passando só pra relembrar que a pendência do seu seguro MAG referente a ${competencia} (${valor_total}) ainda está em aberto, e o link que te enviei vence hoje:
+    """Olá, ${primeiro_nome}! Aqui é a IA do ${nome_corretor} de novo.
+Passando só para lembrar que o prêmio referente a ${competencia} (${valor_total}) ainda consta em aberto. O link que te enviei vence hoje:
 ${link_pagamento}
-Se já tiver pago, pode desconsiderar! E se quiser que eu gere um novo link, é só me avisar por aqui.
-Abraço, ${nome_corretor} — ${corretora}"""
+Se já tiver pago, pode desconsiderar! Se precisar de um novo link, é só me avisar.
+Abraço, ${nome_corretor}"""
 )
 
 # --- Variantes LEMBRETE (seguradora sem link de pagamento, ex.: Prudential) ---
@@ -37,19 +36,18 @@ Abraço, ${nome_corretor} — ${corretora}"""
 # porta para a corretora orientar o pagamento pelo canal próprio.
 
 WHATSAPP_DIA0_LEMBRETE = Template(
-    """Olá, ${primeiro_nome}, tudo bem?
-Aqui é ${nome_corretor}, da ${corretora} — sua corretora parceira.
-Identifiquei uma pendência no seu seguro referente a ${competencia}, no valor de ${valor_total}.
-Para regularizar com tranquilidade, me responda por aqui que eu te oriento sobre o pagamento.
-Se já tiver pago, pode desconsiderar. Qualquer dúvida, estou à disposição.
-Caso não queira mais receber estes lembretes por WhatsApp, responda SAIR."""
+    """Olá, ${primeiro_nome}! Aqui é a IA do ${nome_corretor}, seu corretor de seguros.
+Percebi que você tem um prêmio em aberto referente a ${competencia}, no valor de ${valor_total} — pode ser algum erro na cobrança ou algo que passou despercebido.
+Me responda por aqui que eu te oriento sobre o pagamento.
+Se já tiver pago, pode desconsiderar. Qualquer dúvida, estou aqui para ajudar.
+Caso não queira mais receber estes avisos, responda SAIR."""
 )
 
 WHATSAPP_FOLLOWUP_LEMBRETE = Template(
-    """Olá, ${primeiro_nome}, tudo bem? 😊
-Passando só pra relembrar que a pendência do seu seguro referente a ${competencia} (${valor_total}) ainda consta em aberto por aqui.
-Se já tiver pago, pode desconsiderar! E se quiser, me chama que eu te ajudo a regularizar.
-Abraço, ${nome_corretor} — ${corretora}"""
+    """Olá, ${primeiro_nome}! Aqui é a IA do ${nome_corretor} de novo.
+Passando só para lembrar que o prêmio referente a ${competencia} (${valor_total}) ainda consta em aberto.
+Se já tiver pago, pode desconsiderar! Se quiser, me chama que eu te ajudo a regularizar.
+Abraço, ${nome_corretor}"""
 )
 
 EMAIL_DIA2_ASSUNTO_LEMBRETE = Template("Pendência no seu seguro — ${competencia}")
@@ -87,15 +85,15 @@ EMAIL_DIA2_HTML_LEMBRETE = Template(
 # --- Agente inbound: respostas automáticas ao cliente ------------------------
 
 RESP_SAIR = Template(
-    "Tudo certo, ${primeiro_nome}. Não vou mais te enviar lembretes por aqui. "
-    "Se precisar de algo sobre seu seguro, é só me chamar. Abraço, ${nome_corretor}."
+    "Tudo certo, ${primeiro_nome}! Não vou mais te enviar avisos por aqui. "
+    "Se precisar de algo sobre seu seguro, é só chamar o ${nome_corretor}. Abraço!"
 )
 RESP_JA_PAGUEI_CONFIRMADO = Template(
     "Perfeito, ${primeiro_nome}! Confirmei aqui que está tudo regularizado. "
     "Obrigado e qualquer coisa estou à disposição."
 )
 RESP_JA_PAGUEI_PENDENTE = Template(
-    "Obrigado por avisar, ${primeiro_nome}. Pelo meu sistema ainda consta um valor "
+    "Obrigado por avisar, ${primeiro_nome}! Pelo sistema ainda consta um valor "
     "em aberto (${valor_total}). Às vezes a baixa leva algumas horas — se você já "
     "pagou, pode ignorar. O link segue válido, caso precise:\n${link_pagamento}"
 )
@@ -103,20 +101,20 @@ RESP_JA_PAGUEI_VERIFICANDO = Template(
     "Obrigado, ${primeiro_nome}! Vou confirmar a baixa e já te retorno por aqui."
 )
 RESP_RESCHEDULE_OK = Template(
-    "Sem problema, ${primeiro_nome}. Anotei aqui para ${data_desejada} e já avisei a "
-    "corretora. Te retorno com o link atualizado. Qualquer mudança, é só avisar."
+    "Sem problema, ${primeiro_nome}! Anotei aqui para ${data_desejada} e já avisei o "
+    "${nome_corretor}. Te retorno com o link atualizado. Qualquer mudança, é só avisar."
 )
 RESP_RESCHEDULE_SEM_DATA = Template(
     "Claro, ${primeiro_nome}! Para qual data fica melhor para você? Me diz o dia que "
-    "eu deixo tudo certo por aqui."
+    "eu deixo tudo anotado por aqui."
 )
 RESP_NOVO_LINK = Template(
     "Claro, ${primeiro_nome}! Aqui está o link de pagamento:\n${link_pagamento}\n"
     "Se tiver qualquer dificuldade para abrir, me avisa que eu te ajudo."
 )
 RESP_NOVO_LINK_SEM_LINK = Template(
-    "Claro, ${primeiro_nome}! Vou verificar o link com a corretora e já te reenvio "
-    "por aqui. Qualquer coisa, estou à disposição."
+    "Claro, ${primeiro_nome}! Vou verificar o link e já te reenvio por aqui. "
+    "Qualquer coisa, estou à disposição."
 )
 RESP_DUVIDA = Template(
     "Oi, ${primeiro_nome}! Obrigado pela mensagem. Vou verificar com calma e já te "

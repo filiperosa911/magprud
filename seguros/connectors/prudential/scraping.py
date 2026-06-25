@@ -25,6 +25,48 @@ log = logging.getLogger("seguros.prudential.scraping")
 
 _DIGIT_RUN = re.compile(r"\d+")
 _PHONE_RE = re.compile(r"\(?\d{2}\)?\s*9?\d{4}-?\d{4}")
+_ABRIR_POP_WIN = re.compile(r"AbrirPopWin\('([^']+)'")
+
+PRUDENTIAL_DBClient_BASE = "https://saa.prudential.com.br/DBClient/"
+
+
+def extract_boleto_url(onclick: str) -> str | None:
+    """Extrai a URL completa do popup de segunda via a partir do onclick do botão."""
+    m = _ABRIR_POP_WIN.search(onclick or "")
+    if not m:
+        return None
+    relative = m.group(1)
+    if relative.startswith("http"):
+        return relative
+    return PRUDENTIAL_DBClient_BASE + relative
+
+
+def extract_apolice_from_boleto_url(url: str) -> str | None:
+    """Extrai o número da apólice (parâmetro 'w') da URL do popup."""
+    from urllib.parse import parse_qs, urlparse
+    qs = parse_qs(urlparse(url).query)
+    return (qs.get("w") or [None])[0]
+
+
+def scrape_boleto_urls(page) -> dict[str, str]:
+    """Varre os botões 'Segunda via de Boletos' da grade e retorna {apolice: url}."""
+    result: dict[str, str] = {}
+    try:
+        buttons = page.locator('input[name$="IBT_SegundaViaBoleto"]').all()
+    except Exception:
+        return result
+    for btn in buttons:
+        try:
+            onclick = btn.get_attribute("onclick", timeout=2000) or ""
+            url = extract_boleto_url(onclick)
+            if url:
+                apolice = extract_apolice_from_boleto_url(url)
+                if apolice:
+                    result[apolice] = url
+        except Exception:
+            continue
+    log.debug("scrape_boleto_urls: %d botão(ões) encontrado(s)", len(result))
+    return result
 
 
 def longest_digit_run(text: str) -> str:

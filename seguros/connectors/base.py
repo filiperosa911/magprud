@@ -37,6 +37,7 @@ class Delinquent:
     valor_total_cents: int | None = None
     valor_texto: str | None = None
     competencia: str | None = None
+    telefone: str | None = None  # preenchido quando vem na mesma grade (ex.: Prudential)
     status: WorkStatus = WorkStatus.UNKNOWN
     raw: dict = field(default_factory=dict, repr=False)
 

@@ -314,9 +314,11 @@ class DashboardService:
                 ws = d.status.value if d.status else None
                 if repo.exists(cpf):
                     repo.update_work_status(cpf, ws)  # mantém a base correta
+                    repo.update_telefone_if_missing(cpf, d.telefone)
                     continue
                 repo.insert_enrollment(ClienteRegua(
                     cpf=cpf, corretor_id=self.corretor_id, nome=d.nome,
+                    telefone=d.telefone,
                     valor_inadimplente_cents=d.valor_total_cents, valor_texto=d.valor_texto,
                     vencimento_mais_antigo=d.vencimento_mais_antigo, competencia=d.competencia,
                     work_status=ws, enrolled_em=iso_utc(), status=ReguaStatus.EM_REGUA,
@@ -419,7 +421,7 @@ class DashboardService:
                 "nome_corretor": self.config.nome_corretor,
                 "corretora": self.config.nome_corretora,
             }
-            template = WHATSAPP_DIA0 if self._requer_link else WHATSAPP_DIA0_LEMBRETE
+            template = WHATSAPP_DIA0 if cliente.link_pagamento else WHATSAPP_DIA0_LEMBRETE
             mensagem = render(template, ctx)
             result = self._zapi_sender().send(destino, mensagem)
             nota = (f"[TESTE→{self.test_number}] cliente real: {cliente.telefone}"
@@ -498,7 +500,7 @@ class DashboardService:
                 "nome_corretor": self.config.nome_corretor,
                 "corretora": self.config.nome_corretora,
             }
-            template = WHATSAPP_FOLLOWUP if self._requer_link else WHATSAPP_FOLLOWUP_LEMBRETE
+            template = WHATSAPP_FOLLOWUP if cliente.link_pagamento else WHATSAPP_FOLLOWUP_LEMBRETE
             mensagem = render(template, ctx)
             result = self._zapi_sender().send(destino, mensagem)
             nota = (f"[FOLLOWUP][TESTE→{self.test_number}] cliente real: {cliente.telefone}"
