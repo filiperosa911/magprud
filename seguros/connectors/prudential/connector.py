@@ -19,7 +19,6 @@ feito 1x no ``--login``; sem sessão válida, ``ensure_authenticated`` orienta a
 
 from __future__ import annotations
 
-import base64
 import logging
 import pathlib
 
@@ -192,43 +191,120 @@ class PrudentialConnector(SeguradoraConnector):
         except (PlaywrightTimeout, PlaywrightError) as e:
             log.warning("radio não selecionado: %s", e)
 
-        # Clica Imprimir: ASP.NET faz postback -> abre popup que carrega o boleto
-        # (ExibeRelatorio.aspx). A URL exige sessão ativa, então salvamos o PDF
-        # localmente via CDP (funciona no Chrome headed) enquanto o popup está aberto.
+        # BTN_Imprimir abre o boleto numa nova janela (popup) com ModalGenerica.aspx.
+        # Dentro dela, um iframe mostra ExibeRelatorio.aspx como PDF no viewer do Chrome.
+        # Estratégia: detectar popup via context.on("page"), esperar o PDF carregar,
+        # clicar no botão de download (seta) do Chrome PDF viewer.
         link: str | None = None
+        popup_ref: list = []
+
+        def _on_popup(new_page) -> None:
+            popup_ref.append(new_page)
+
+        ctx = self.page.context
+        ctx.on("page", _on_popup)
         try:
-            with self.page.expect_popup(timeout=20000) as popup_info:
-                self.page.locator('input[name="BTN_Imprimir"]').click(
-                    timeout=8000, no_wait_after=True
-                )
-            popup = popup_info.value
-            popup.wait_for_load_state("networkidle", timeout=25000)
-            # Aguarda o iframe interno carregar completamente antes de salvar.
-            popup.wait_for_timeout(4000)
-
-            pdf_path = self._save_popup_pdf(popup, cpf)
-            if pdf_path:
-                link = str(pdf_path)
-                log.info("boleto salvo: %s", pdf_path)
-            else:
-                # Fallback: guarda a URL (só abre com sessão ativa)
-                url = popup.url
-                link = url if url and url != "about:blank" else None
-
-            popup.close()
+            self.page.locator('input[name="BTN_Imprimir"]').click(
+                timeout=8000, no_wait_after=True
+            )
+            # Aguarda popup aparecer (até 15 s).
+            for _ in range(30):
+                if popup_ref:
+                    break
+                self.page.wait_for_timeout(500)
         except (PlaywrightTimeout, PlaywrightError) as e:
-            log.warning("popup do boleto não capturado: %s", e)
-            # Fallback: download direto (PDF entregue como arquivo)
+            log.warning("erro ao clicar Imprimir: %s", e)
+        finally:
+            ctx.remove_listener("page", _on_popup)
+
+        if not popup_ref:
+            log.warning("popup não detectado (apólice %s)", cpf)
+        else:
+            popup = popup_ref[-1]
             try:
-                with self.page.expect_download(timeout=8000) as dl_info:
-                    self.page.locator('input[name="BTN_Imprimir"]').click(timeout=5000)
-                download = dl_info.value
-                pdf_path = self._boleto_dir() / f"{cpf}.pdf"
-                pdf_path.parent.mkdir(parents=True, exist_ok=True)
-                download.save_as(str(pdf_path))
-                link = str(pdf_path)
-            except (PlaywrightTimeout, PlaywrightError):
-                pass
+                # Espera o PDF carregar completamente no viewer.
+                popup.wait_for_load_state("networkidle", timeout=20000)
+                popup.wait_for_timeout(3000)
+
+                dest = self._boleto_dir() / f"{cpf}.pdf"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+
+                # O botão de download é <cr-icon-button id="save"> dentro do
+                # shadow DOM do Chrome PDF viewer. Usamos JS para percorrer
+                # os shadow roots e clicar nele.
+                # Seletores específicos para o botão de download LOCAL
+                # (não o "Salvar no Google Drive" que também tem id="save").
+                # iron-icon="cr:file-download" é exclusivo do download para disco.
+                _JS_HAS_BTN = """
+                    () => {
+                        function find(root) {
+                            if (!root) return false;
+                            if (root.querySelector('cr-icon-button[iron-icon="cr:file-download"]')) return true;
+                            if (root.querySelector('cr-icon-button[aria-label="Baixar"]')) return true;
+                            for (const n of root.querySelectorAll('*')) {
+                                if (n.shadowRoot && find(n.shadowRoot)) return true;
+                            }
+                            return false;
+                        }
+                        return find(document);
+                    }
+                """
+                _JS_CLICK_SAVE = """
+                    () => {
+                        function findInShadow(root) {
+                            if (!root) return null;
+                            let el = root.querySelector('cr-icon-button[iron-icon="cr:file-download"]');
+                            if (el) return el;
+                            el = root.querySelector('cr-icon-button[aria-label="Baixar"]');
+                            if (el) return el;
+                            for (const n of root.querySelectorAll('*')) {
+                                if (n.shadowRoot) {
+                                    const found = findInShadow(n.shadowRoot);
+                                    if (found) return found;
+                                }
+                            }
+                            return null;
+                        }
+                        const btn = findInShadow(document);
+                        if (btn) { btn.click(); return true; }
+                        return false;
+                    }
+                """
+                downloaded = False
+                all_frames = [popup] + list(popup.frames)
+                log.debug("frames disponíveis: %s", [f.url for f in popup.frames])
+
+                for target in all_frames:
+                    try:
+                        has_btn = target.evaluate(_JS_HAS_BTN)
+                        if not has_btn:
+                            log.debug("sem botão em: %s", getattr(target, "url", "?")[:60])
+                            continue
+                        log.info("botão encontrado em frame: %s", getattr(target, "url", "?")[:60])
+                        with popup.expect_download(timeout=10000) as dl_info:
+                            target.evaluate(_JS_CLICK_SAVE)
+                        dl_info.value.save_as(str(dest))
+                        downloaded = True
+                        log.info("boleto baixado via JS shadow DOM: %s", dest)
+                        break
+                    except Exception as ex:
+                        log.debug("frame %s: %s", getattr(target, "url", "popup")[:60], ex)
+
+                if not downloaded:
+                    # Fallback: baixar diretamente da URL do iframe com cookies de sessão.
+                    saved = self._save_popup_pdf(popup, cpf)
+                    if saved:
+                        downloaded = True
+                        dest = saved
+
+                if downloaded:
+                    link = str(dest)
+                else:
+                    log.warning("PDF não capturado (apólice %s)", cpf)
+                    link = popup.url if popup.url not in ("about:blank", "") else None
+            except (PlaywrightTimeout, PlaywrightError) as e:
+                log.warning("erro aguardando popup carregar: %s", e)
+                link = popup_ref[-1].url if popup_ref else None
 
         log.info("segunda via gerada: apólice=%s link=%s", cpf, link or "(sem URL)")
         return PaymentLinkResult(cpf, link=link, dry_run=False,
@@ -240,53 +316,51 @@ class PrudentialConnector(SeguradoraConnector):
         return pathlib.Path(self.cfg.db_path).parent / "boletos"
 
     def _save_popup_pdf(self, popup, cpf: str) -> pathlib.Path | None:
-        """Salva o boleto como PDF via CDP (Page.printToPDF — funciona em headed).
+        """Baixa o PDF do boleto diretamente da URL do iframe (ExibeRelatorio.aspx).
 
-        ModalGenerica é um wrapper com overlay escuro + iframe do boleto. Não
-        navegamos para fora dela (o servidor rejeita navegação direta ao iframe).
-        Em vez disso, limpamos a página via JS para que o iframe ocupe tudo.
+        ExibeRelatorio.aspx retorna o PDF como application/pdf — não precisa de
+        printToPDF. Usamos page.context.request para fazer o GET com as cookies
+        de sessão ativas.
         """
         try:
-            if "ModalGenerica" in (popup.url or ""):
-                # Remove overlay escuro e faz o iframe preencher a página inteira.
-                popup.evaluate("""
-                    () => {
-                        document.documentElement.style.background = 'white';
-                        document.body.style.cssText =
-                            'margin:0;padding:0;background:white;overflow:hidden;';
-                        const iframe = document.querySelector('iframe');
-                        if (iframe) {
-                            iframe.style.cssText =
-                                'position:fixed;top:0;left:0;' +
-                                'width:100vw;height:100vh;border:none;';
-                        }
-                        Array.from(document.body.children).forEach(el => {
-                            if (el.tagName.toLowerCase() !== 'iframe') {
-                                el.style.display = 'none';
-                            }
-                        });
-                    }
-                """)
+            # Extrai a URL do iframe com o boleto (ExibeRelatorio.aspx).
+            iframe_url = popup.evaluate("""
+                () => {
+                    const iframe = document.querySelector('iframe[src]');
+                    return iframe ? iframe.src : null;
+                }
+            """)
+            if not iframe_url:
+                # Tenta achar nos frames registrados pelo Playwright.
+                for frame in popup.frames:
+                    if frame.url and "ExibeRelatorio" in frame.url:
+                        iframe_url = frame.url
+                        break
 
-            popup.emulate_media(media="print")
-            cdp = popup.context.new_cdp_session(popup)
-            result = cdp.send("Page.printToPDF", {
-                "printBackground": False,
-                "paperWidth": 8.27,
-                "paperHeight": 11.69,
-                "marginTop": 0.4,
-                "marginBottom": 0.4,
-                "marginLeft": 0.4,
-                "marginRight": 0.4,
-            })
-            pdf_bytes = base64.b64decode(result["data"])
+            if not iframe_url:
+                log.warning("iframe do boleto não encontrado em %s", popup.url)
+                return None
+
+            log.debug("baixando PDF do iframe: %s", iframe_url)
+            response = popup.context.request.get(iframe_url)
+            if not response.ok:
+                log.warning("GET iframe retornou %s", response.status)
+                return None
+
+            pdf_bytes = response.body()
+            if not pdf_bytes.startswith(b"%PDF"):
+                log.warning(
+                    "GET iframe não retornou PDF (%d bytes, inicio=%r): %s",
+                    len(pdf_bytes), pdf_bytes[:8], iframe_url[:80]
+                )
+                return None
             dest = self._boleto_dir() / f"{cpf}.pdf"
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(pdf_bytes)
-            cdp.detach()
+            log.info("boleto baixado via request direto: %s (%d bytes)", dest, len(pdf_bytes))
             return dest
         except Exception as e:
-            log.warning("PDF via CDP falhou: %s", e)
+            log.warning("download do PDF falhou: %s", e)
             return None
 
     # --- re-check de status --------------------------------------------------
